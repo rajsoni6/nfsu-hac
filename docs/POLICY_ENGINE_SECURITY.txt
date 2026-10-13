@@ -1,0 +1,117 @@
+================================================================================
+  NFSU PLACEMENT PORTAL — PLACEMENT POLICY ENGINE SECURITY
+  Session 2026-27
+================================================================================
+
+--------------------------------------------------------------------------------
+1. OVERVIEW
+--------------------------------------------------------------------------------
+File: backend/src/services/policyEngine.service.js
+
+The policy engine enforces placement rules server-side before any offer is
+recorded. It cannot be bypassed by the frontend — all checks run in the
+controller before the Offer document is created.
+
+--------------------------------------------------------------------------------
+2. COMPANY CATEGORY SWITCHING RULES
+--------------------------------------------------------------------------------
+Category    Package Range    Rule
+--------    -------------    ---------------------------------------------------
+A+          >= 16 LPA        No switching — student exits placement process
+A           10-16 LPA        May switch only to A+ companies
+B           6-10 LPA         May switch only if new package >= 1.5x current
+C           < 6 LPA          Eligible for all higher-category opportunities
+
+--------------------------------------------------------------------------------
+3. OFFER TYPE RESTRICTIONS
+--------------------------------------------------------------------------------
+Current Offer Type    Can Apply For
+------------------    ----------------------------------------------------------
+I  (Internship)       F or I+F only
+F  (FTE)              I only
+I+F (Internship+FTE)  No further participation allowed
+
+--------------------------------------------------------------------------------
+4. ADDITIONAL AUTOMATED CHECKS
+--------------------------------------------------------------------------------
+Check                           Rule
+------------------------------  ------------------------------------------------
+Registration requirement        Student must have registrationStatus = registered
+Eligibility requirement         Student must have eligibilityStatus = eligible
+Absenteeism exclusion           3+ unexcused absences → excluded from drives
+Offer acceptance deadline       24 hours from offer date (or company timeline)
+Off-campus offers               Recorded separately, require manual data entry
+Deregistration                  Deregistered students cannot receive new offers
+
+--------------------------------------------------------------------------------
+5. POLICY ENGINE RESPONSE
+--------------------------------------------------------------------------------
+Every offer creation triggers a policy check. The result is stored on the
+Offer document in the policyCheckResult field:
+
+  {
+    "allowed": false,
+    "reason": "Student holds A-category offer. Switching only permitted to A+ companies.",
+    "flags": ["SWITCHING_VIOLATION"],
+    "requiresManualReview": false,
+    "overridableBy": ["admin"]
+  }
+
+Fields:
+  allowed             : boolean — whether the offer is permitted
+  reason              : human-readable explanation
+  flags               : array of violation codes
+  requiresManualReview: whether admin review is required
+  overridableBy       : roles that can override the flag
+
+--------------------------------------------------------------------------------
+6. POLICY OVERRIDE SECURITY
+--------------------------------------------------------------------------------
+- Only Admin role can override a policy flag
+- Override requires a written reason (stored in AuditLog)
+- Override action logged as OFFER_OVERRIDE with before/after snapshots
+- Override cannot be performed by Coordinator, Student, or Recruiter (HTTP 403)
+- All overrides visible in Audit Log viewer
+
+--------------------------------------------------------------------------------
+7. POLICY RULES — DATABASE-DRIVEN CONFIGURATION
+--------------------------------------------------------------------------------
+File: backend/src/models/PolicyRule.model.js
+Route: GET/PUT /api/policy/rules (Admin only)
+
+Rules are stored in the PolicyRule collection and loaded at runtime.
+This allows Admin to adjust thresholds without code changes.
+
+Active policy rules (seeded defaults):
+  Rule Key              Description
+  --------------------  --------------------------------------------------------
+  A_PLUS_NO_SWITCH      A+ students exit placement — no switching
+  A_SWITCH_TO_APLUS     A students may only switch to A+
+  B_SWITCH_1_5X         B students: new package must be >= 1.5x current
+  C_OPEN_SWITCH         C students eligible for all higher categories
+  OFFER_TYPE_I_RULE     Internship holders: can apply for F or I+F only
+  OFFER_TYPE_F_RULE     FTE holders: can apply for I only
+  IF_NO_FURTHER         I+F holders: no further participation
+  ABSENTEEISM_LIMIT     Max 3 unexcused absences before exclusion
+  OFFER_DEADLINE_HRS    Default acceptance deadline: 24 hours
+  REGISTRATION_REQ      Only registered students can receive offers
+
+--------------------------------------------------------------------------------
+8. ELIGIBILITY SERVICE
+--------------------------------------------------------------------------------
+File: backend/src/services/eligibility.service.js
+
+Checks performed before offer creation:
+  1. Student exists and is not archived
+  2. registrationStatus === 'registered'
+  3. eligibilityStatus === 'eligible'
+  4. Student has not exceeded absenteeism limit
+  5. Student's current offer type allows new application (offer type rules)
+  6. Company category switching rules satisfied
+
+If any check fails, the offer is blocked and the reason is returned to the
+admin with the specific flag code.
+
+================================================================================
+  END OF DOCUMENT
+================================================================================

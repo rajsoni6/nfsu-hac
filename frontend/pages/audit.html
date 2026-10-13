@@ -1,0 +1,118 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Audit Logs — NFSU Placement</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="menu-toggle" id="menu-toggle">☰</button>
+        <span class="topbar-title" id="page-title">Audit Logs</span>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-secondary btn-sm" onclick="load()">🔄 Refresh</button>
+      </div>
+    </header>
+    <div class="page-content">
+      <div class="page-header"><div><h1>Audit Logs</h1><p>Tamper-evident record of all sensitive actions</p></div></div>
+
+      <div class="filter-bar">
+        <select id="filter-action">
+          <option value="">All Actions</option>
+          <option>LOGIN</option><option>LOGOUT</option><option>STUDENT_CREATED</option>
+          <option>STUDENT_UPDATED</option><option>STUDENT_ARCHIVED</option>
+          <option>OFFER_CREATED</option><option>OFFER_OVERRIDE</option>
+          <option>EXPORT_GENERATED</option><option>PII_VIEWED</option>
+          <option>POLICY_RULE_CHANGED</option>
+        </select>
+        <input type="date" id="filter-from" placeholder="From date">
+        <input type="date" id="filter-to" placeholder="To date">
+        <button class="btn btn-secondary btn-sm" onclick="load()">Apply</button>
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Timestamp</th><th>Actor</th><th>Action</th><th>Target</th><th>IP</th></tr>
+            </thead>
+            <tbody id="audit-tbody">
+              <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted)">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+        <div class="pagination" id="pagination"></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../js/app.js"></script>
+<script>
+  requireAuth(['admin']);
+  initPage('Audit Logs', 'Audit Logs');
+
+  const ACTION_COLORS = {
+    LOGIN:'badge-success', LOGOUT:'badge-gray', LOGIN_FAILED:'badge-danger',
+    ACCOUNT_LOCKED:'badge-danger', STUDENT_CREATED:'badge-primary',
+    STUDENT_UPDATED:'badge-info', STUDENT_ARCHIVED:'badge-warning',
+    OFFER_CREATED:'badge-primary', OFFER_OVERRIDE:'badge-danger',
+    EXPORT_GENERATED:'badge-warning', PII_VIEWED:'badge-warning',
+    POLICY_RULE_CHANGED:'badge-danger',
+  };
+
+  let currentPage = 1;
+
+  async function load(page = 1) {
+    currentPage = page;
+    const action = document.getElementById('filter-action').value;
+    const from = document.getElementById('filter-from').value;
+    const to = document.getElementById('filter-to').value;
+    const params = new URLSearchParams({ page, limit: 20 });
+    if (action) params.set('action', action);
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+
+    const tbody = document.getElementById('audit-tbody');
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted)">Loading…</td></tr>';
+
+    const res = await apiFetch('/audit/logs?' + params);
+    const logs = res?.data?.logs || [];
+    const total = res?.data?.total || 0;
+    const limit = 20;
+
+    if (!logs.length) {
+      tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state"><div class="empty-icon">🔍</div><p>No audit logs found</p></div></td></tr>';
+      document.getElementById('pagination').innerHTML = '';
+      return;
+    }
+
+    tbody.innerHTML = logs.map(l => `<tr>
+      <td class="td-muted" style="white-space:nowrap;font-size:.8rem">${new Date(l.timestamp).toLocaleString('en-IN')}</td>
+      <td><strong>${l.actor?.username || l.actor || '—'}</strong><br><span class="td-muted" style="font-size:.75rem">${l.actor?.role || ''}</span></td>
+      <td><span class="badge ${ACTION_COLORS[l.action]||'badge-gray'}" style="font-size:.75rem">${l.action}</span></td>
+      <td class="td-muted" style="font-size:.8rem">${l.targetModel || '—'}${l.targetId ? `<br><code style="font-size:.7rem">${String(l.targetId).slice(-8)}</code>` : ''}</td>
+      <td class="td-muted" style="font-size:.8rem">${l.ipAddress || '—'}</td>
+    </tr>`).join('');
+
+    const pages = Math.ceil(total / limit);
+    const pg = document.getElementById('pagination');
+    if (pages <= 1) { pg.innerHTML = ''; return; }
+    pg.innerHTML = `<span class="page-info">Page ${page} of ${pages} (${total} total)</span>` +
+      (page > 1 ? `<button class="page-btn" onclick="load(${page-1})">‹</button>` : '') +
+      Array.from({length: Math.min(pages, 5)}, (_, i) => {
+        const p = Math.max(1, page - 2) + i;
+        return p <= pages ? `<button class="page-btn ${p===page?'active':''}" onclick="load(${p})">${p}</button>` : '';
+      }).join('') +
+      (page < pages ? `<button class="page-btn" onclick="load(${page+1})">›</button>` : '');
+  }
+
+  load();
+</script>
+</body>
+</html>

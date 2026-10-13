@@ -1,0 +1,103 @@
+================================================================================
+  NFSU PLACEMENT PORTAL — SECURITY CHECKLIST
+  Session 2026-27
+  Use this checklist before every deployment and release.
+================================================================================
+
+--------------------------------------------------------------------------------
+PRE-DEPLOYMENT CHECKLIST
+--------------------------------------------------------------------------------
+
+SECRETS & ENVIRONMENT
+[ ] .env file is NOT committed to version control
+[ ] .gitignore includes .env in both backend/ and frontend/
+[ ] All secrets in .env are strong random values (not defaults or examples)
+[ ] MONGODB_ENCRYPTION_KEY is a unique 32-byte hex value
+[ ] AUDIT_ENCRYPTION_KEY is a unique 32-byte hex value (different from above)
+[ ] JWT_ACCESS_SECRET and JWT_REFRESH_SECRET are different strong values
+[ ] SESSION_SECRET is a strong random value
+[ ] BCRYPT_ROUNDS is set to 12 or higher
+[ ] NODE_ENV is set to 'production'
+[ ] ALLOWED_ORIGINS contains only the production domain
+
+DEPENDENCIES
+[ ] npm audit run in backend/ — no high or critical vulnerabilities
+[ ] npm audit run in frontend/ — no high or critical vulnerabilities
+[ ] All packages are up to date (npm outdated checked)
+
+DATABASE
+[ ] MongoDB connection uses TLS (Atlas enforces this by default)
+[ ] MongoDB user has minimum required permissions (not root)
+[ ] Database backups are encrypted and tested for restoration
+[ ] Unique index on Student.placementId confirmed active
+[ ] AuditLog collection has no update/delete routes exposed
+
+AUTHENTICATION
+[ ] MFA enforced for all Admin accounts
+[ ] MFA enforced for all Coordinator accounts
+[ ] Default/demo passwords changed (no Student@1234, Coord@1234 in production)
+[ ] Account lockout tested (5 failed attempts → 15-minute lock)
+[ ] Token blacklist working on logout
+
+TRANSPORT
+[ ] HTTPS certificate valid and not expiring within 30 days
+[ ] HSTS header present in responses
+[ ] Refresh token cookie has secure=true and sameSite=strict
+[ ] CORS ALLOWED_ORIGINS does not include wildcard (*)
+
+INPUT SECURITY
+[ ] express-mongo-sanitize middleware active
+[ ] xss-clean middleware active
+[ ] Helmet middleware active with CSP configured
+[ ] Rate limiting active on auth, api, and export endpoints
+[ ] All Joi validators in place for create/update routes
+
+RBAC
+[ ] Admin-only routes return 403 for coordinator/student/recruiter
+[ ] Student cannot access other students' records (IDOR test)
+[ ] Coordinator cannot access other courses' students (IDOR test)
+[ ] Export endpoint returns 403 for non-admin roles
+[ ] Audit log endpoint returns 403 for non-admin roles
+
+AUDIT
+[ ] AuditLog documents are being created for all sensitive actions
+[ ] AuditLog has no update or delete routes
+[ ] PII_VIEWED events logged when admin/coordinator accesses mobile/email
+
+--------------------------------------------------------------------------------
+POST-DEPLOYMENT VERIFICATION
+--------------------------------------------------------------------------------
+
+[ ] Login works for admin, coordinator, student, recruiter roles
+[ ] Student created by admin can log in with provided password
+[ ] Student can only see own profile (/students/me)
+[ ] MFA challenge appears for admin and coordinator login
+[ ] Rate limiting returns 429 after threshold exceeded
+[ ] Logout clears refresh token cookie and blacklists access token
+[ ] Audit log shows LOGIN entry after successful login
+[ ] Export download works for admin, returns 403 for coordinator
+
+--------------------------------------------------------------------------------
+PERIODIC SECURITY TASKS
+--------------------------------------------------------------------------------
+
+Monthly:
+[ ] Review audit logs for anomalous activity
+[ ] Check for failed login spikes (potential brute-force)
+[ ] Run npm audit and patch findings
+
+Per Semester:
+[ ] Rotate JWT secrets and encryption keys
+[ ] Review and revoke inactive user accounts
+[ ] Test backup restoration procedure
+[ ] Review RBAC — remove users who no longer need access
+
+End of Placement Session:
+[ ] Export and archive audit logs to encrypted cold storage
+[ ] Deactivate all student and recruiter accounts
+[ ] Rotate all secrets before next session begins
+[ ] Document any security incidents from the session
+
+================================================================================
+  END OF DOCUMENT
+================================================================================

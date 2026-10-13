@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Import Students — NFSU Placement</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="menu-toggle" id="menu-toggle">☰</button>
+        <span class="topbar-title" id="page-title">Import Students</span>
+      </div>
+    </header>
+    <div class="page-content">
+      <div class="page-header"><div><h1>Bulk Import</h1><p>Upload a JSON array of student records</p></div></div>
+      <div class="card" style="max-width:640px">
+        <div class="card-header"><span class="card-title">📥 Upload JSON</span></div>
+        <div style="padding:20px">
+          <div class="alert alert-warning" style="margin-bottom:16px">
+            <span>⚠️</span>
+            <div>Each record must include: <code>name, mobile, email, course, batch</code>. Duplicate emails/IDs are skipped.</div>
+          </div>
+          <div class="form-group">
+            <label>JSON File</label>
+            <input type="file" id="json-file" accept=".json">
+          </div>
+          <div class="form-group">
+            <label>Or paste JSON directly</label>
+            <textarea id="json-text" rows="8" placeholder='[{"name":"...","mobile":"...","email":"...","course":"MTCS","batch":"2024-26"}]' style="font-family:monospace;font-size:.8rem"></textarea>
+          </div>
+          <div id="import-result" style="display:none"></div>
+          <div class="form-actions">
+            <button class="btn btn-primary" id="import-btn">📥 Import</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="../js/app.js"></script>
+<script>
+  requireAuth(['admin']);
+  initPage('Import', 'Import Students');
+
+  document.getElementById('json-file').addEventListener('change', e => {
+    const file = e.target.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = ev => { document.getElementById('json-text').value = ev.target.result; };
+    reader.readAsText(file);
+  });
+
+  document.getElementById('import-btn').addEventListener('click', async () => {
+    const raw = document.getElementById('json-text').value.trim();
+    if (!raw) return toast('Paste or upload JSON first', 'error');
+    let data;
+    try { data = JSON.parse(raw); } catch { return toast('Invalid JSON', 'error'); }
+    if (!Array.isArray(data)) return toast('JSON must be an array', 'error');
+
+    const btn = document.getElementById('import-btn');
+    btn.disabled = true; btn.textContent = 'Importing…';
+    const res = await apiFetch('/students/import', { method: 'POST', body: JSON.stringify({ students: data }) });
+    btn.disabled = false; btn.textContent = '📥 Import';
+
+    const el = document.getElementById('import-result');
+    el.style.display = 'block';
+    if (res?.success) {
+      el.innerHTML = `<div class="alert alert-success"><span>✅</span><div>Imported <strong>${res.data?.imported ?? 0}</strong> students. Skipped: ${res.data?.skipped ?? 0}.</div></div>`;
+      toast('Import complete');
+    } else {
+      el.innerHTML = `<div class="alert alert-danger"><span>❌</span><div>${res?.message || 'Import failed'}</div></div>`;
+    }
+  });
+</script>
+</body>
+</html>

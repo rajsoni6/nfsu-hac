@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Coursewise Report — NFSU Placement</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="menu-toggle" id="menu-toggle">☰</button>
+        <span class="topbar-title" id="page-title">Coursewise Report</span>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-secondary btn-sm" onclick="load()">🔄 Refresh</button>
+      </div>
+    </header>
+    <div class="page-content">
+      <div class="page-header"><div><h1>Coursewise Placement Report</h1><p>Session 2026–27</p></div></div>
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr><th>Course</th><th>Total</th><th>Registered</th><th>Eligible</th><th>Placed (FTE)</th><th>Internship</th><th>I+FTE</th><th>Unplaced</th><th>Placement %</th><th>Avg Package</th></tr>
+            </thead>
+            <tbody id="report-tbody">
+              <tr><td colspan="10" style="text-align:center;padding:32px;color:var(--text-muted)">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="../js/app.js"></script>
+<script>
+  requireAuth(['admin','coordinator']);
+  initPage('Coursewise', 'Coursewise Report');
+
+  async function load() {
+    const res = await apiFetch('/dashboard/coursewise');
+    const tbody = document.getElementById('report-tbody');
+    const courses = res?.data?.courses || [];
+    if (!courses.length) {
+      tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">📊</div><p>No data</p></div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = courses.map(c => {
+      const pct = c.total ? Math.round((c.placed / c.total) * 100) : 0;
+      return `<tr>
+        <td>${coursePill(c.course)}</td>
+        <td><strong>${c.total}</strong></td>
+        <td>${c.registered ?? '—'}</td>
+        <td>${c.eligible ?? '—'}</td>
+        <td>${c.placed ?? 0}</td>
+        <td>${c.internshipOnly ?? 0}</td>
+        <td>${c.internshipFte ?? 0}</td>
+        <td>${c.unplaced ?? 0}</td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div class="progress-bar" style="flex:1;min-width:60px"><div class="progress-fill ${pct>=70?'green':pct>=40?'amber':''}" style="width:${pct}%"></div></div>
+            <span style="font-size:.8rem;color:var(--text-muted)">${pct}%</span>
+          </div>
+        </td>
+        <td>${c.avgPackage ? fmtLPA(c.avgPackage) : '—'}</td>
+      </tr>`;
+    }).join('');
+  }
+  load();
+</script>
+</body>
+</html>

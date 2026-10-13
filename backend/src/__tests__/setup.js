@@ -1,0 +1,14 @@
+require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
+
+process.env.NODE_ENV = 'test';
+process.env.JWT_ACCESS_SECRET = 'test_access_secret_min_64_chars_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+process.env.JWT_REFRESH_SECRET = 'test_refresh_secret_min_64_chars_xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx';
+process.env.JWT_ACCESS_EXPIRY = '15m';
+process.env.JWT_REFRESH_EXPIRY = '7d';
+process.env.BCRYPT_ROUNDS = '4';
+process.env.SESSION_SECRET = 'test_session_secret';
+process.env.MFA_ISSUER = 'NFSU_Test';
+process.env.MONGODB_ENCRYPTION_KEY = 'a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2';
+process.env.AUDIT_ENCRYPTION_KEY = 'b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3d4e5f6a1b2c3';
+process.env.ALLOWED_ORIGINS = 'http://localhost:3000';
+// MONGODB_URI is loaded from .env (Atlas) — do not override

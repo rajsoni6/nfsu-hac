@@ -1,0 +1,78 @@
+================================================================================
+  NFSU PLACEMENT PORTAL — SECURITY DOCUMENTATION INDEX
+  Session 2026-27
+================================================================================
+
+This folder contains all security documentation for the NFSU Placement
+Management System. Each file covers a specific security domain.
+
+--------------------------------------------------------------------------------
+FILES IN THIS FOLDER
+--------------------------------------------------------------------------------
+
+1. SECURITY_OVERVIEW.txt
+   High-level summary of all security controls in the system.
+   Start here for a complete picture.
+
+2. AUTHENTICATION_SECURITY.txt
+   Password policy, JWT architecture, MFA setup and flow,
+   account lockout, session management, student login provisioning.
+
+3. RBAC_ACCESS_CONTROL.txt
+   Role definitions, permission matrix, backend and frontend enforcement,
+   IDOR prevention, complete route protection table.
+
+4. DATA_PROTECTION_ENCRYPTION.txt
+   AES-256 field-level encryption, encrypted fields list, PII access control,
+   export data protection, environment secrets management, key generation.
+
+5. INPUT_SECURITY_INJECTION.txt
+   Server-side validation (Joi), NoSQL injection prevention, XSS prevention,
+   HTTP security headers (Helmet), rate limiting, CORS policy, security tests.
+
+6. AUDIT_LOGGING.txt
+   AuditLog schema, complete list of logged actions, access control,
+   integrity guarantees, retention policy, how to read audit logs.
+
+7. POLICY_ENGINE_SECURITY.txt
+   Placement policy rules, switching rules, offer type restrictions,
+   eligibility checks, policy override security, database-driven configuration.
+
+8. SECURITY_CHECKLIST.txt
+   Pre-deployment checklist, post-deployment verification,
+   periodic security tasks, end-of-session procedures.
+
+9. INCIDENT_RESPONSE.txt
+   Incident classification (P1-P4), immediate response steps,
+   forensic evidence preservation, secret rotation procedure,
+   post-incident review template.
+
+10. SECURITY_INDEX.txt  (this file)
+    Index and quick reference.
+
+--------------------------------------------------------------------------------
+QUICK REFERENCE — WHERE TO LOOK
+--------------------------------------------------------------------------------
+
+Topic                               File
+----------------------------------  -------------------------------------------
+How passwords are stored            AUTHENTICATION_SECURITY.txt  §1
+How JWT tokens work                 AUTHENTICATION_SECURITY.txt  §2
+How MFA works                       AUTHENTICATION_SECURITY.txt  §3
+What each role can access           RBAC_ACCESS_CONTROL.txt      §2
+Which routes are protected          RBAC_ACCESS_CONTROL.txt      §6
+Which fields are encrypted          DATA_PROTECTION_ENCRYPTION.txt §2
+How to generate encryption keys     DATA_PROTECTION_ENCRYPTION.txt §8
+How NoSQL injection is prevented    INPUT_SECURITY_INJECTION.txt §2
+Rate limit thresholds               INPUT_SECURITY_INJECTION.txt §5
+What actions are logged             AUDIT_LOGGING.txt            §3
+How to view audit logs              AUDIT_LOGGING.txt            §7
+Placement switching rules           POLICY_ENGINE_SECURITY.txt   §2
+How to override a policy flag       POLICY_ENGINE_SECURITY.txt   §6
+Pre-deployment checklist            SECURITY_CHECKLIST.txt
+What to do if account compromised   INCIDENT_RESPONSE.txt        §2
+How to rotate secrets               INCIDENT_RESPONSE.txt        §4
+
+================================================================================
+  NFSU Placement Cell — Placement Session 2026-27
+================================================================================

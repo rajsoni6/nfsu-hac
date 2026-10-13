@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Offers — NFSU Placement</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="menu-toggle" id="menu-toggle">☰</button>
+        <span class="topbar-title" id="page-title">Offers</span>
+      </div>
+      <div class="topbar-right">
+        <a href="offer-entry.html" class="btn btn-primary btn-sm" data-roles="admin">+ New Offer</a>
+      </div>
+    </header>
+
+    <div class="page-content">
+      <div class="filter-bar">
+        <select id="filter-acceptance">
+          <option value="">All Acceptance</option>
+          <option value="pending">Pending</option>
+          <option value="accepted">Accepted</option>
+          <option value="declined">Declined</option>
+          <option value="expired">Expired</option>
+        </select>
+        <select id="filter-type">
+          <option value="">All Types</option>
+          <option value="I">Internship (I)</option>
+          <option value="F">FTE (F)</option>
+          <option value="I+F">I+F</option>
+        </select>
+        <button class="btn btn-secondary btn-sm" onclick="loadOffers()">Apply</button>
+      </div>
+
+      <div class="card">
+        <div class="table-wrap">
+          <table>
+            <thead>
+              <tr>
+                <th>Student</th><th>Course</th><th>Company</th><th>Type</th>
+                <th>Category</th><th>Package</th><th>Offer Date</th>
+                <th>Acceptance</th><th>Joining</th><th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="offers-tbody">
+              <tr><td colspan="10" style="text-align:center;padding:32px;color:var(--text-muted)">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Update Status Modal -->
+<div class="modal-overlay" id="modal-status">
+  <div class="modal" style="max-width:420px">
+    <div class="modal-header"><span class="modal-title" id="status-modal-title">Update Status</span><button class="modal-close">✕</button></div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label id="status-label">Status</label>
+        <select id="status-value"></select>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" data-close-modal>Cancel</button>
+      <button class="btn btn-primary" id="confirm-status">Update</button>
+    </div>
+  </div>
+</div>
+
+<script src="../js/app.js"></script>
+<script>
+  const user = requireAuth(['admin', 'coordinator', 'recruiter', 'student']);
+  initPage('Offers', 'Offers');
+
+  const ACCEPTANCE = { accepted:{cls:'badge-success',label:'Accepted'}, declined:{cls:'badge-danger',label:'Declined'}, pending:{cls:'badge-warning',label:'Pending'}, expired:{cls:'badge-gray',label:'Expired'} };
+  const JOINING = { joined:{cls:'badge-success',label:'Joined'}, not_joined:{cls:'badge-danger',label:'Not Joined'}, pending:{cls:'badge-warning',label:'Pending'} };
+  const OFFER_TYPE = { 'I':'Internship','F':'FTE','I+F':'I+F' };
+
+  let pendingUpdate = null;
+
+  async function loadOffers() {
+    const acceptance = document.getElementById('filter-acceptance').value;
+    const type = document.getElementById('filter-type').value;
+    const params = new URLSearchParams();
+    if (acceptance) params.set('acceptanceStatus', acceptance);
+    if (type) params.set('offerType', type);
+
+    const tbody = document.getElementById('offers-tbody');
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;padding:32px;color:var(--text-muted)">Loading…</td></tr>';
+
+    const res = await apiFetch('/offers?' + params);
+    const offers = res?.data?.offers || [];
+
+    if (!offers.length) {
+      tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state"><div class="empty-icon">📋</div><p>No offers found</p></div></td></tr>';
+      return;
+    }
+
+    tbody.innerHTML = offers.map(o => `
+      <tr>
+        <td><strong>${o.student?.name || '—'}</strong><br><span class="td-muted">${o.student?.placementId || ''}</span></td>
+        <td>${o.student?.course ? coursePill(o.student.course) : '—'}</td>
+        <td><strong>${o.company?.name || '—'}</strong></td>
+        <td><span class="badge badge-primary">${OFFER_TYPE[o.offerType]||o.offerType}</span></td>
+        <td>${o.category ? statusBadge(o.category, CATEGORY_BADGE) : '—'}</td>
+        <td>${o.ctcLPA ? fmtLPA(o.ctcLPA) : o.stipendAmount ? `₹${o.stipendAmount}/mo` : '—'}</td>
+        <td class="td-muted">${fmtDate(o.offerDate)}</td>
+        <td>${statusBadge(o.acceptanceStatus, ACCEPTANCE)}</td>
+        <td>${statusBadge(o.joiningStatus, JOINING)}</td>
+        <td>
+          <div style="display:flex;gap:5px">
+            ${user.role === 'admin' ? `
+              <button class="btn btn-icon btn-sm" title="Update Acceptance" onclick="openStatusModal('${o._id}','acceptance')">✅</button>
+              <button class="btn btn-icon btn-sm" title="Update Joining" onclick="openStatusModal('${o._id}','joining')">🏢</button>
+            ` : ''}
+            ${!o.policyCheckResult?.allowed ? `<span class="badge badge-warning" title="${o.policyCheckResult?.reason||''}">⚠️ Policy</span>` : ''}
+          </div>
+        </td>
+      </tr>`).join('');
+  }
+
+  function openStatusModal(offerId, type) {
+    pendingUpdate = { offerId, type };
+    const sel = document.getElementById('status-value');
+    sel.innerHTML = '';
+    if (type === 'acceptance') {
+      document.getElementById('status-modal-title').textContent = 'Update Acceptance Status';
+      document.getElementById('status-label').textContent = 'Acceptance Status';
+      ['pending','accepted','declined','expired'].forEach(v => {
+        const o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o);
+      });
+    } else {
+      document.getElementById('status-modal-title').textContent = 'Update Joining Status';
+      document.getElementById('status-label').textContent = 'Joining Status';
+      ['pending','joined','not_joined'].forEach(v => {
+        const o = document.createElement('option'); o.value = v; o.textContent = v; sel.appendChild(o);
+      });
+    }
+    openModal('modal-status');
+  }
+
+  document.getElementById('confirm-status').addEventListener('click', async () => {
+    if (!pendingUpdate) return;
+    const { offerId, type } = pendingUpdate;
+    const value = document.getElementById('status-value').value;
+    const endpoint = type === 'acceptance' ? `/offers/${offerId}/acceptance` : `/offers/${offerId}/joining`;
+    const body = type === 'acceptance' ? { acceptanceStatus: value } : { joiningStatus: value };
+    const res = await apiFetch(endpoint, { method: 'PATCH', body: JSON.stringify(body) });
+    closeModal('modal-status');
+    if (res?.success) { toast('Status updated'); loadOffers(); }
+    else toast(res?.message || 'Update failed', 'error');
+  });
+
+  loadOffers();
+</script>
+</body>
+</html>

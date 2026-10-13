@@ -1,0 +1,77 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Package Report — NFSU Placement</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="menu-toggle" id="menu-toggle">☰</button>
+        <span class="topbar-title" id="page-title">Package Report</span>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-secondary btn-sm" onclick="load()">🔄 Refresh</button>
+      </div>
+    </header>
+    <div class="page-content">
+      <div class="page-header"><div><h1>Package Distribution Report</h1><p>Session 2026–27</p></div></div>
+
+      <div class="stats-grid" id="pkg-stats" style="margin-bottom:24px">
+        <div class="stat-card"><div class="stat-icon green">💰</div><div><div class="stat-value" id="p-highest">—</div><div class="stat-label">Highest Package</div></div></div>
+        <div class="stat-card"><div class="stat-icon blue">📊</div><div><div class="stat-value" id="p-avg">—</div><div class="stat-label">Average Package</div></div></div>
+        <div class="stat-card"><div class="stat-icon amber">📉</div><div><div class="stat-value" id="p-median">—</div><div class="stat-label">Median Package</div></div></div>
+        <div class="stat-card"><div class="stat-icon purple">🏆</div><div><div class="stat-value" id="p-above10">—</div><div class="stat-label">Above ₹10 LPA</div></div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-header"><span class="card-title">📋 Category-wise Breakdown</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Category</th><th>Students</th><th>Avg Package</th><th>Min</th><th>Max</th></tr></thead>
+            <tbody id="pkg-tbody">
+              <tr><td colspan="5" style="text-align:center;padding:32px;color:var(--text-muted)">Loading…</td></tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+<script src="../js/app.js"></script>
+<script>
+  requireAuth(['admin']);
+  initPage('Packages', 'Package Report');
+
+  async function load() {
+    const res = await apiFetch('/dashboard/packages');
+    const d = res?.data;
+    if (!d) return;
+
+    if (d.highest != null) document.getElementById('p-highest').textContent = fmtLPA(d.highest);
+    if (d.average != null) document.getElementById('p-avg').textContent = fmtLPA(d.average);
+    if (d.median != null) document.getElementById('p-median').textContent = fmtLPA(d.median);
+    if (d.above10 != null) document.getElementById('p-above10').textContent = d.above10;
+
+    const tbody = document.getElementById('pkg-tbody');
+    const cats = d.byCategory || [];
+    if (!cats.length) {
+      tbody.innerHTML = '<tr><td colspan="5"><div class="empty-state"><div class="empty-icon">💰</div><p>No data</p></div></td></tr>';
+      return;
+    }
+    tbody.innerHTML = cats.map(c => `<tr>
+      <td>${statusBadge(c.category, CATEGORY_BADGE)}</td>
+      <td><strong>${c.count}</strong></td>
+      <td>${fmtLPA(c.avg)}</td>
+      <td>${fmtLPA(c.min)}</td>
+      <td>${fmtLPA(c.max)}</td>
+    </tr>`).join('');
+  }
+  load();
+</script>
+</body>
+</html>

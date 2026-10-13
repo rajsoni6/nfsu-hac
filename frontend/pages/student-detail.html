@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Student Detail — NFSU Placement</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="menu-toggle" id="menu-toggle">☰</button>
+        <a href="students.html" class="btn btn-secondary btn-sm">← Back</a>
+        <span class="topbar-title" id="page-title">Student Detail</span>
+      </div>
+      <div class="topbar-right" id="topbar-actions"></div>
+    </header>
+
+    <div class="page-content">
+      <div id="loading" style="text-align:center;padding:60px;color:var(--text-muted)">Loading student…</div>
+      <div id="content" style="display:none">
+
+        <!-- Profile Header -->
+        <div class="card" style="margin-bottom:20px">
+          <div style="display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap">
+            <div style="width:64px;height:64px;border-radius:50%;background:var(--primary);display:flex;align-items:center;justify-content:center;font-size:1.6rem;color:#fff;flex-shrink:0" id="avatar">🎓</div>
+            <div style="flex:1">
+              <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px">
+                <h2 id="s-name" style="font-size:1.3rem;font-weight:700"></h2>
+                <span id="s-placement-badge"></span>
+                <span id="s-elig-badge"></span>
+              </div>
+              <div style="display:flex;gap:16px;flex-wrap:wrap;font-size:.875rem;color:var(--text-muted)">
+                <span>🆔 <span id="s-pid"></span></span>
+                <span id="s-course-pill"></span>
+                <span>📅 Batch <span id="s-batch"></span></span>
+                <span id="s-category-span"></span>
+              </div>
+            </div>
+            <div style="text-align:right">
+              <div style="font-size:1.4rem;font-weight:700;color:var(--primary)" id="s-package"></div>
+              <div style="font-size:.78rem;color:var(--text-muted)">Current Package</div>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px" class="detail-grid">
+          <!-- Contact Info -->
+          <div class="card">
+            <div class="card-header"><span class="card-title">📞 Contact Information</span></div>
+            <div style="display:flex;flex-direction:column;gap:12px;font-size:.875rem">
+              <div style="display:flex;justify-content:space-between">
+                <span style="color:var(--text-muted)">Mobile</span>
+                <span id="s-mobile">
+                  <button class="btn btn-secondary btn-sm" id="reveal-mobile">🔒 Reveal</button>
+                </span>
+              </div>
+              <div style="display:flex;justify-content:space-between">
+                <span style="color:var(--text-muted)">Email</span>
+                <span id="s-email">
+                  <button class="btn btn-secondary btn-sm" id="reveal-email">🔒 Reveal</button>
+                </span>
+              </div>
+              <div style="display:flex;justify-content:space-between">
+                <span style="color:var(--text-muted)">Registration</span>
+                <span id="s-reg"></span>
+              </div>
+              <div style="display:flex;justify-content:space-between">
+                <span style="color:var(--text-muted)">Absenteeism</span>
+                <span id="s-absent"></span>
+              </div>
+              <div style="display:flex;justify-content:space-between">
+                <span style="color:var(--text-muted)">Drive Exclusion</span>
+                <span id="s-excluded"></span>
+              </div>
+            </div>
+          </div>
+
+          <!-- Remarks -->
+          <div class="card">
+            <div class="card-header"><span class="card-title">📝 Remarks & Status</span></div>
+            <div style="font-size:.875rem;color:var(--text-muted);margin-bottom:12px" id="s-remarks">No remarks.</div>
+            <div style="font-size:.78rem;color:var(--text-muted)">
+              Created: <span id="s-created"></span><br>
+              Updated: <span id="s-updated"></span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Offer History -->
+        <div class="card" style="margin-top:20px">
+          <div class="card-header">
+            <span class="card-title">📋 Offer History</span>
+            <span id="offer-count" class="badge badge-gray">0 offers</span>
+          </div>
+          <div id="offer-timeline">
+            <div class="empty-state"><div class="empty-icon">📋</div><p>No offers recorded</p></div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../js/app.js"></script>
+<script>
+  const user = requireAuth(['admin', 'coordinator', 'student']);
+  initPage('Students', 'Student Detail');
+
+  const id = new URLSearchParams(location.search).get('id');
+  if (!id) window.location.href = 'students.html';
+
+  let studentData = null;
+
+  async function load() {
+    const [sRes, oRes] = await Promise.all([
+      apiFetch('/students/' + id),
+      apiFetch('/offers?student=' + id),
+    ]);
+
+    document.getElementById('loading').style.display = 'none';
+    document.getElementById('content').style.display = 'block';
+
+    if (!sRes?.data?.student) {
+      document.getElementById('content').innerHTML = '<div class="alert alert-danger">Student not found or access denied.</div>';
+      return;
+    }
+
+    const s = sRes.data.student;
+    studentData = s;
+
+    document.getElementById('s-name').textContent = s.name;
+    document.getElementById('s-pid').textContent = s.placementId || '—';
+    document.getElementById('s-course-pill').innerHTML = coursePill(s.course);
+    document.getElementById('s-batch').textContent = s.batch;
+    document.getElementById('s-placement-badge').innerHTML = statusBadge(s.placementStatus, PLACEMENT_STATUS);
+    document.getElementById('s-elig-badge').innerHTML = statusBadge(s.eligibilityStatus, ELIGIBILITY_STATUS);
+    document.getElementById('s-package').textContent = fmtLPA(s.currentPackageLPA);
+    document.getElementById('s-category-span').innerHTML = s.currentCategory
+      ? `🏷️ Category: ${statusBadge(s.currentCategory, CATEGORY_BADGE)}` : '';
+    document.getElementById('s-reg').innerHTML = `<span class="badge ${s.registrationStatus==='registered'?'badge-success':'badge-warning'}">${s.registrationStatus.replace('_',' ')}</span>`;
+    document.getElementById('s-absent').textContent = s.absenteeismCount ?? 0;
+    document.getElementById('s-excluded').innerHTML = s.isExcludedFromDrives
+      ? '<span class="badge badge-danger">Excluded</span>'
+      : '<span class="badge badge-success">Active</span>';
+    document.getElementById('s-remarks').textContent = s.remarks || 'No remarks.';
+    document.getElementById('s-created').textContent = fmtDate(s.createdAt);
+    document.getElementById('s-updated').textContent = fmtDate(s.updatedAt);
+
+    // PII reveal (admin/coordinator only)
+    if (['admin','coordinator'].includes(user.role)) {
+      document.getElementById('reveal-mobile').addEventListener('click', async () => {
+        const r = await apiFetch('/students/' + id);
+        document.getElementById('s-mobile').textContent = r?.data?.student?.mobile || '—';
+      });
+      document.getElementById('reveal-email').addEventListener('click', async () => {
+        const r = await apiFetch('/students/' + id);
+        document.getElementById('s-email').textContent = r?.data?.student?.email || '—';
+      });
+    } else {
+      document.getElementById('reveal-mobile').style.display = 'none';
+      document.getElementById('reveal-email').style.display = 'none';
+    }
+
+    // Admin actions
+    if (user.role === 'admin') {
+      document.getElementById('topbar-actions').innerHTML = `
+        <a href="offer-entry.html?student=${s._id}" class="btn btn-primary btn-sm">+ New Offer</a>`;
+    }
+
+    // Offers
+    const offers = oRes?.data?.offers || [];
+    document.getElementById('offer-count').textContent = `${offers.length} offer${offers.length!==1?'s':''}`;
+    if (offers.length) {
+      const OFFER_TYPE = { 'I':'Internship','F':'FTE','I+F':'Internship + FTE' };
+      document.getElementById('offer-timeline').innerHTML = `<div class="timeline">` +
+        offers.map(o => {
+          const dotColor = o.acceptanceStatus==='accepted'?'green':o.acceptanceStatus==='declined'?'red':'amber';
+          return `<div class="timeline-item">
+            <div class="timeline-dot ${dotColor}"></div>
+            <div class="timeline-date">${fmtDate(o.offerDate)}</div>
+            <div class="timeline-content">
+              <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px">
+                <strong>${o.company?.name || '—'}</strong>
+                <div style="display:flex;gap:6px">
+                  <span class="badge badge-primary">${OFFER_TYPE[o.offerType]||o.offerType}</span>
+                  ${statusBadge(o.acceptanceStatus,{accepted:{cls:'badge-success',label:'Accepted'},declined:{cls:'badge-danger',label:'Declined'},pending:{cls:'badge-warning',label:'Pending'},expired:{cls:'badge-gray',label:'Expired'}})}
+                </div>
+              </div>
+              <div style="margin-top:8px;font-size:.82rem;color:var(--text-muted);display:flex;gap:16px;flex-wrap:wrap">
+                ${o.ctcLPA ? `<span>💰 ${fmtLPA(o.ctcLPA)}</span>` : ''}
+                ${o.stipendAmount ? `<span>📅 ₹${o.stipendAmount}/mo</span>` : ''}
+                <span>🏢 ${o.company?.category || '—'} category</span>
+                ${o.isOffCampus ? '<span class="badge badge-warning">Off-Campus</span>' : ''}
+              </div>
+              ${!o.policyCheckResult?.allowed ? `<div class="alert alert-warning" style="margin-top:8px;padding:8px 12px;font-size:.8rem"><span>⚠️</span><span>Policy flag: ${o.policyCheckResult?.reason||'—'}</span></div>` : ''}
+            </div>
+          </div>`;
+        }).join('') + `</div>`;
+    }
+  }
+
+  load();
+</script>
+<style>@media(max-width:768px){.detail-grid{grid-template-columns:1fr !important}}</style>
+</body>
+</html>

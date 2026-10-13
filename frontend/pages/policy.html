@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Policy Rules — NFSU Placement</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="menu-toggle" id="menu-toggle">☰</button>
+        <span class="topbar-title" id="page-title">Policy Rules</span>
+      </div>
+      <div class="topbar-right">
+        <button class="btn btn-secondary btn-sm" onclick="load()">🔄 Refresh</button>
+      </div>
+    </header>
+    <div class="page-content">
+      <div class="page-header"><div><h1>Placement Policy Rules</h1><p>Configure switching rules and offer-type restrictions</p></div></div>
+
+      <!-- Dry-run check -->
+      <div class="card" style="margin-bottom:20px">
+        <div class="card-header"><span class="card-title">🧪 Dry-Run Policy Check</span></div>
+        <div style="padding:16px">
+          <div class="form-grid">
+            <div class="form-group">
+              <label>Student Placement ID</label>
+              <input type="text" id="check-pid" placeholder="NFSU-2627-MTCS-001">
+            </div>
+            <div class="form-group">
+              <label>Company ID</label>
+              <select id="check-company"><option value="">Select company…</option></select>
+            </div>
+            <div class="form-group">
+              <label>Offer Type</label>
+              <select id="check-type">
+                <option value="I">Internship (I)</option>
+                <option value="F">FTE (F)</option>
+                <option value="I+F">I+F</option>
+              </select>
+            </div>
+          </div>
+          <button class="btn btn-primary" onclick="runCheck()">Run Check</button>
+          <div id="check-result" style="margin-top:16px"></div>
+        </div>
+      </div>
+
+      <!-- Policy rules list -->
+      <div class="card">
+        <div class="card-header"><span class="card-title">⚙️ Active Rules</span></div>
+        <div id="rules-list" style="padding:16px">
+          <div class="empty-state"><div class="empty-icon">⏳</div><p>Loading…</p></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Edit Rule Modal -->
+<div class="modal-overlay" id="modal-rule">
+  <div class="modal" style="max-width:480px">
+    <div class="modal-header"><span class="modal-title">Edit Policy Rule</span><button class="modal-close">✕</button></div>
+    <div class="modal-body">
+      <form id="rule-form">
+        <input type="hidden" id="rule-id">
+        <div class="form-group">
+          <label>Rule Name</label>
+          <input type="text" id="rule-name" readonly style="background:var(--bg-secondary)">
+        </div>
+        <div class="form-group">
+          <label>Description</label>
+          <textarea id="rule-desc" rows="3"></textarea>
+        </div>
+        <div class="form-group">
+          <label>Enabled</label>
+          <select id="rule-enabled">
+            <option value="true">Yes</option>
+            <option value="false">No</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label>Parameters (JSON)</label>
+          <textarea id="rule-params" rows="4" style="font-family:monospace;font-size:.8rem"></textarea>
+        </div>
+        <div class="form-actions">
+          <button type="button" class="btn btn-secondary" data-close-modal>Cancel</button>
+          <button type="submit" class="btn btn-primary">Save Rule</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<script src="../js/app.js"></script>
+<script>
+  requireAuth(['admin']);
+  initPage('Policy Rules', 'Policy Rules');
+
+  async function loadCompanies() {
+    const res = await apiFetch('/companies');
+    const sel = document.getElementById('check-company');
+    (res?.data?.companies || []).forEach(c => {
+      const o = document.createElement('option');
+      o.value = c._id; o.textContent = `${c.name} [${c.category}]`;
+      sel.appendChild(o);
+    });
+  }
+
+  async function load() {
+    const res = await apiFetch('/policy/rules');
+    const rules = res?.data?.rules || [];
+    const el = document.getElementById('rules-list');
+
+    if (!rules.length) {
+      el.innerHTML = '<div class="empty-state"><div class="empty-icon">⚙️</div><p>No policy rules configured</p></div>';
+      return;
+    }
+
+    el.innerHTML = rules.map(r => `
+      <div style="border:1px solid var(--border);border-radius:10px;padding:16px;margin-bottom:12px">
+        <div style="display:flex;justify-content:space-between;align-items:flex-start">
+          <div>
+            <div style="font-weight:600;margin-bottom:4px">${r.name || r.ruleKey}</div>
+            <div style="font-size:.85rem;color:var(--text-muted);margin-bottom:8px">${r.description || '—'}</div>
+            ${r.parameters ? `<pre>${JSON.stringify(r.parameters, null, 2)}</pre>` : ''}
+          </div>
+          <div style="display:flex;flex-direction:column;align-items:flex-end;gap:8px">
+            <span class="badge ${r.isEnabled !== false ? 'badge-success' : 'badge-gray'}">${r.isEnabled !== false ? 'Enabled' : 'Disabled'}</span>
+            <button class="btn btn-icon btn-sm" onclick="editRule(${JSON.stringify(r).replace(/"/g,'&quot;')})">✏️</button>
+          </div>
+        </div>
+      </div>`).join('');
+  }
+
+  function editRule(r) {
+    document.getElementById('rule-id').value = r._id;
+    document.getElementById('rule-name').value = r.name || r.ruleKey || '';
+    document.getElementById('rule-desc').value = r.description || '';
+    document.getElementById('rule-enabled').value = String(r.isEnabled !== false);
+    document.getElementById('rule-params').value = r.parameters ? JSON.stringify(r.parameters, null, 2) : '';
+    openModal('modal-rule');
+  }
+
+  document.getElementById('rule-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    const id = document.getElementById('rule-id').value;
+    let params = null;
+    const raw = document.getElementById('rule-params').value.trim();
+    if (raw) { try { params = JSON.parse(raw); } catch { return toast('Invalid JSON in parameters', 'error'); } }
+    const body = {
+      description: document.getElementById('rule-desc').value,
+      isEnabled: document.getElementById('rule-enabled').value === 'true',
+      ...(params && { parameters: params }),
+    };
+    const res = await apiFetch('/policy/rules/' + id, { method: 'PUT', body: JSON.stringify(body) });
+    closeModal('modal-rule');
+    if (res?.success) { toast('Rule updated'); load(); }
+    else toast(res?.message || 'Update failed', 'error');
+  });
+
+  async function runCheck() {
+    const pid = document.getElementById('check-pid').value.trim();
+    const companyId = document.getElementById('check-company').value;
+    const offerType = document.getElementById('check-type').value;
+    if (!pid || !companyId) return toast('Fill placement ID and company', 'error');
+
+    const res = await apiFetch('/policy/check', {
+      method: 'POST',
+      body: JSON.stringify({ placementId: pid, companyId, offerType }),
+    });
+
+    const el = document.getElementById('check-result');
+    const d = res?.data;
+    if (!d) { el.innerHTML = `<div class="alert alert-danger"><span>❌</span><div>${res?.message || 'Check failed'}</div></div>`; return; }
+
+    const cls = d.allowed ? 'alert-success' : 'alert-danger';
+    const icon = d.allowed ? '✅' : '❌';
+    el.innerHTML = `
+      <div class="alert ${cls}">
+        <span>${icon}</span>
+        <div>
+          <strong>${d.allowed ? 'Allowed' : 'Blocked'}</strong><br>
+          <span style="font-size:.85rem">${d.reason || ''}</span>
+          ${d.flags?.length ? `<br><span style="font-size:.8rem;color:var(--text-muted)">Flags: ${d.flags.join(', ')}</span>` : ''}
+          ${d.requiresManualReview ? `<br><span class="badge badge-warning" style="margin-top:4px">Requires Manual Review</span>` : ''}
+        </div>
+      </div>`;
+  }
+
+  loadCompanies();
+  load();
+</script>
+</body>
+</html>

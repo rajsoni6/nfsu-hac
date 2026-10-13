@@ -1,0 +1,90 @@
+================================================================================
+  NFSU PLACEMENT PORTAL — AUDIT LOGGING
+  Session 2026-27
+================================================================================
+
+--------------------------------------------------------------------------------
+1. OVERVIEW
+--------------------------------------------------------------------------------
+Every sensitive action in the system produces an immutable AuditLog document.
+The audit trail is designed to be tamper-evident:
+  - No UPDATE route exists for AuditLog
+  - No DELETE route exists for AuditLog
+  - Documents are append-only
+  - Before/after snapshots of PII fields are stored encrypted
+
+--------------------------------------------------------------------------------
+2. AUDITLOG SCHEMA
+--------------------------------------------------------------------------------
+Field           Type              Description
+-----------     ---------------   ---------------------------------------------
+actor           ObjectId → User   Who performed the action
+action          String            Action code (see section 3)
+targetModel     String            Model affected (Student, Offer, User, etc.)
+targetId        ObjectId          ID of the affected document
+ipAddress       String            Client IP address
+userAgent       String            Client browser/agent string
+before          Mixed (encrypted) Document state before the change
+after           Mixed (encrypted) Document state after the change
+timestamp       Date (indexed)    When the action occurred (auto, no override)
+
+--------------------------------------------------------------------------------
+3. LOGGED ACTIONS
+--------------------------------------------------------------------------------
+Action Code             Trigger                         Logged Fields
+----------------------  ------------------------------  -----------------------
+LOGIN                   Successful login                actor, ip, userAgent
+LOGIN_FAILED            Failed login attempt            actor, ip, attempt count
+LOGOUT                  User logout                     actor, ip, userAgent
+ACCOUNT_LOCKED          5 failed attempts reached       actor, ip
+PASSWORD_CHANGED        Password change                 actor
+MFA_ENABLED             MFA activated on account        actor
+STUDENT_CREATED         New student record created      actor, after snapshot
+STUDENT_UPDATED         Student record modified         actor, before, after, fields
+STUDENT_ARCHIVED        Student record archived         actor, before snapshot
+OFFER_CREATED           New offer recorded              actor, policyCheckResult, after
+OFFER_OVERRIDE          Policy flag manually overridden actor, reason, before, after
+EXPORT_GENERATED        Data export triggered           actor, filters, rowCount, timestamp
+PII_VIEWED              Mobile/email field accessed     actor, targetStudentId, field
+POLICY_RULE_CHANGED     Policy rule updated             actor, before, after
+USER_CREATED            New user account created        actor, targetUser
+
+--------------------------------------------------------------------------------
+4. AUDIT LOG ACCESS
+--------------------------------------------------------------------------------
+- View all logs     : GET /api/audit/logs          (Admin only)
+- View by target    : GET /api/audit/logs/:targetId (Admin only)
+- Coordinator, Student, Recruiter → HTTP 403
+
+--------------------------------------------------------------------------------
+5. INTEGRITY GUARANTEES
+--------------------------------------------------------------------------------
+- timestamp field has no setter — set once at creation, never overwritten
+- MongoDB index on timestamp field for efficient time-range queries
+- No route in the application allows modification of AuditLog documents
+- Before/after snapshots encrypted with AUDIT_ENCRYPTION_KEY
+- AuditLog collection should have MongoDB-level write concern: majority
+
+--------------------------------------------------------------------------------
+6. AUDIT LOG RETENTION
+--------------------------------------------------------------------------------
+Recommended retention: minimum 1 academic year (12 months)
+Archival: Export to encrypted cold storage at end of placement session
+Deletion: Only by database administrator with documented justification
+
+--------------------------------------------------------------------------------
+7. READING AUDIT LOGS (ADMIN)
+--------------------------------------------------------------------------------
+Filter options available via GET /api/audit/logs:
+  ?action=OFFER_CREATED
+  ?actor=<userId>
+  ?targetId=<studentId>
+  ?from=2025-01-01&to=2025-06-30
+
+Frontend: Reports → Audit Logs page (Admin only)
+  - Searchable by action, actor, date range
+  - Displays: timestamp, actor username, action, target, IP address
+
+================================================================================
+  END OF DOCUMENT
+================================================================================

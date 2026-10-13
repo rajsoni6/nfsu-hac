@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>My Profile — NFSU Placement</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="menu-toggle" id="menu-toggle">☰</button>
+        <span class="topbar-title" id="page-title">My Profile</span>
+      </div>
+    </header>
+    <div class="page-content" id="profile-content">
+      <div class="empty-state"><div class="empty-icon">⏳</div><p>Loading…</p></div>
+    </div>
+  </div>
+</div>
+<script src="../js/app.js"></script>
+<script>
+  const user = requireAuth(['student','admin','coordinator']);
+  initPage('My Profile', 'My Profile');
+
+  async function load() {
+    const u = getUser();
+    // admin/coordinator: use query param id if present
+    const params = new URLSearchParams(window.location.search);
+    const id = params.get('id');
+    const endpoint = id ? '/students/' + id : '/students/me';
+    const res = await apiFetch(endpoint);
+    const s = res?.data?.student;
+    const el = document.getElementById('profile-content');
+    if (!s) { el.innerHTML = '<div class="empty-state"><div class="empty-icon">❌</div><p>Profile not found</p></div>'; return; }
+
+    el.innerHTML = `
+      <div class="page-header"><div><h1>${s.name}</h1><p>${s.placementId}</p></div></div>
+      <div style="display:grid;grid-template-columns:1fr 1fr;gap:20px" class="two-col">
+        <div class="card">
+          <div class="card-header"><span class="card-title">👤 Personal Info</span></div>
+          <div style="padding:16px;display:flex;flex-direction:column;gap:10px;font-size:.9rem">
+            <div><span style="color:var(--text-muted)">Course</span><br><strong>${coursePill(s.course)}</strong></div>
+            <div><span style="color:var(--text-muted)">Batch</span><br><strong>${s.batch}</strong></div>
+            <div><span style="color:var(--text-muted)">Email</span><br><strong>${s.email || '—'}</strong></div>
+            <div><span style="color:var(--text-muted)">Mobile</span><br><strong>${s.mobile || '—'}</strong></div>
+          </div>
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">🎯 Placement Status</span></div>
+          <div style="padding:16px;display:flex;flex-direction:column;gap:10px;font-size:.9rem">
+            <div><span style="color:var(--text-muted)">Registration</span><br><strong>${s.registrationStatus}</strong></div>
+            <div><span style="color:var(--text-muted)">Eligibility</span><br>${statusBadge(s.eligibilityStatus, ELIGIBILITY_STATUS)}</div>
+            <div><span style="color:var(--text-muted)">Placement</span><br>${statusBadge(s.placementStatus, PLACEMENT_STATUS)}</div>
+            <div><span style="color:var(--text-muted)">Category</span><br>${s.currentCategory ? statusBadge(s.currentCategory, CATEGORY_BADGE) : '<span class="td-muted">—</span>'}</div>
+            <div><span style="color:var(--text-muted)">Package</span><br><strong>${fmtLPA(s.currentPackageLPA)}</strong></div>
+          </div>
+        </div>
+      </div>
+      <div class="card" style="margin-top:20px">
+        <div class="card-header"><span class="card-title">📋 Offer History</span></div>
+        <div class="table-wrap">
+          <table>
+            <thead><tr><th>Company</th><th>Type</th><th>Category</th><th>Package</th><th>Offer Date</th><th>Acceptance</th><th>Joining</th></tr></thead>
+            <tbody id="offers-tbody"><tr><td colspan="7" style="text-align:center;padding:20px;color:var(--text-muted)">Loading…</td></tr></tbody>
+          </table>
+        </div>
+      </div>`;
+
+    const ACCEPTANCE = { accepted:{cls:'badge-success',label:'Accepted'}, declined:{cls:'badge-danger',label:'Declined'}, pending:{cls:'badge-warning',label:'Pending'}, expired:{cls:'badge-gray',label:'Expired'} };
+    const JOINING = { joined:{cls:'badge-success',label:'Joined'}, not_joined:{cls:'badge-danger',label:'Not Joined'}, pending:{cls:'badge-warning',label:'Pending'} };
+    const offRes = await apiFetch('/offers?student=' + s._id);
+    const offers = offRes?.data?.offers || [];
+    const tbody = document.getElementById('offers-tbody');
+    if (!offers.length) { tbody.innerHTML = '<tr><td colspan="7"><div class="empty-state"><div class="empty-icon">📋</div><p>No offers yet</p></div></td></tr>'; return; }
+    tbody.innerHTML = offers.map(o => `<tr>
+      <td><strong>${o.company?.name||'—'}</strong></td>
+      <td><span class="badge badge-primary">${o.offerType}</span></td>
+      <td>${o.category ? statusBadge(o.category, CATEGORY_BADGE) : '—'}</td>
+      <td>${o.ctcLPA ? fmtLPA(o.ctcLPA) : o.stipendAmount ? `₹${o.stipendAmount}/mo` : '—'}</td>
+      <td class="td-muted">${fmtDate(o.offerDate)}</td>
+      <td>${statusBadge(o.acceptanceStatus, ACCEPTANCE)}</td>
+      <td>${statusBadge(o.joiningStatus, JOINING)}</td>
+    </tr>`).join('');
+  }
+  load();
+</script>
+<style>@media(max-width:768px){.two-col{grid-template-columns:1fr !important}}</style>
+</body>
+</html>

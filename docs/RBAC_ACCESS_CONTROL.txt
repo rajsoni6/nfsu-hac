@@ -1,0 +1,145 @@
+================================================================================
+  NFSU PLACEMENT PORTAL — ROLE-BASED ACCESS CONTROL (RBAC)
+  Session 2026-27
+================================================================================
+
+--------------------------------------------------------------------------------
+1. ROLES
+--------------------------------------------------------------------------------
+Role          Description                                                                                       
+----------    ------------------------------------------------------------------
+admin         Full system access. Manages users, policy, exports, audit logs.
+coordinator   Scoped to own assigned course. Manages students and views offers.
+student       Read-only access to own profile, own offers, company list.
+recruiter     Access to own company's offers and company stats only.
+
+--------------------------------------------------------------------------------
+2. PERMISSION MATRIX
+--------------------------------------------------------------------------------
+Permission                        Admin   Coordinator   Student   Recruiter
+--------------------------------  -----   -----------   -------   ---------
+Create student                    YES     NO            NO        NO
+Edit student                      YES     YES (course)  NO        NO
+View student list                 YES     YES (course)  NO        NO
+View own profile                  YES     YES           YES       NO
+View mobile / email               YES     YES (course)  YES(own)  NO
+Archive student                   YES     NO            NO        NO
+Bulk import students              YES     NO            NO        NO
+Create offer                      YES     NO            NO        NO
+View offers                       YES     YES (course)  YES(own)  YES(co.)
+Override policy flag              YES     NO            NO        NO
+Manage companies                  YES     NO            NO        NO
+View company list                 YES     YES           YES(r/o)  YES(own)
+View placed count per company     YES     YES (course)  YES(r/o)  YES(own)
+View dashboard                    YES     YES (course)  NO        NO
+Export data                       YES     NO            NO        NO
+View audit logs                   YES     NO            NO        NO
+Manage policy rules               YES     NO            NO        NO
+Manage users                      YES     NO            NO        NO
+
+(course) = restricted to coordinator's assigned course only
+(own)    = restricted to own record only
+(co.)    = restricted to own company only
+(r/o)    = read-only, no PII
+
+--------------------------------------------------------------------------------
+3. BACKEND ENFORCEMENT
+--------------------------------------------------------------------------------
+File: backend/src/middleware/authorize.js
+
+The authorize() middleware is applied at the route level:
+
+  router.get('/',              authorize('admin', 'coordinator'), ctrl.getAll);
+  router.post('/',             authorize('admin'),                ctrl.create);
+  router.get('/me',            authorize('student'),              ctrl.getMe);
+  router.get('/:id',           authorize('admin','coordinator','student'), ctrl.getOne);
+  router.put('/:id',           authorize('admin', 'coordinator'), ctrl.update);
+  router.patch('/:id/archive', authorize('admin'),                ctrl.archive);
+  router.get('/export',        authorize('admin'),                ctrl.exportData);
+
+Additional scoping inside controllers:
+  - Coordinator: filter.course = req.user.courseAssigned
+  - Student: verified req.user.studentRef === student._id before returning data
+  - Recruiter: offer queries filtered by req.user.companyAssigned
+
+--------------------------------------------------------------------------------
+4. FRONTEND ENFORCEMENT
+--------------------------------------------------------------------------------
+File: frontend/js/app.js — requireAuth(allowedRoles)
+File: frontend/pages/*.html — requireAuth(['admin','coordinator']) at page load
+
+  requireAuth(['admin'])              → admin-only pages
+  requireAuth(['admin','coordinator'])→ management pages
+  requireAuth(['student'])            → student profile page
+  requireAuth(['recruiter'])          → recruiter portal
+
+Role-based UI hiding:
+  - data-roles="admin" attribute hides elements from non-admin users
+  - Export button hidden for all roles except admin
+  - Edit/Archive buttons hidden for student and recruiter roles
+  - Sidebar navigation links filtered by role
+
+--------------------------------------------------------------------------------
+5. IDOR PREVENTION
+--------------------------------------------------------------------------------
+IDOR (Insecure Direct Object Reference) is prevented by:
+
+  Student access:
+    Controller checks req.user.studentRef === student._id
+    Returns 403 if student attempts to access another student's record
+
+  Coordinator access:
+    Controller checks student.course === req.user.courseAssigned
+    Returns 403 if coordinator attempts cross-course access
+
+  Recruiter access:
+    Offer queries filtered by company: req.user.companyAssigned
+    Returns 403 if recruiter attempts to access other company's data
+
+Security test cases covering IDOR:
+  - Student modifies own placement status via direct API call → 403
+  - Student accesses another student's record by ID manipulation → 403
+  - Recruiter creates or edits an offer → 403
+  - Coordinator accesses students outside own course → 403
+
+--------------------------------------------------------------------------------
+6. ROUTE PROTECTION SUMMARY
+--------------------------------------------------------------------------------
+Route                           Method   Roles Allowed
+------------------------------  ------   ----------------------------------
+/api/auth/login                 POST     Public
+/api/auth/mfa/verify            POST     Public
+/api/auth/refresh               POST     Public
+/api/auth/logout                POST     Authenticated (any role)
+/api/auth/change-password       POST     Authenticated (any role)
+/api/students                   GET      admin, coordinator
+/api/students                   POST     admin
+/api/students/me                GET      student
+/api/students/:id               GET      admin, coordinator, student
+/api/students/:id               PUT      admin, coordinator
+/api/students/:id/archive       PATCH    admin
+/api/students/import            POST     admin
+/api/students/export            GET      admin
+/api/offers                     GET      admin, coordinator, recruiter
+/api/offers                     POST     admin
+/api/offers/:id                 GET      admin, student, recruiter
+/api/offers/:id/acceptance      PATCH    admin
+/api/offers/:id/joining         PATCH    admin
+/api/offers/:id/override        POST     admin
+/api/companies                  GET      admin, coordinator, recruiter, student
+/api/companies/:id/stats        GET      admin, coordinator, student
+/api/companies                  POST     admin
+/api/companies/:id              PUT      admin
+/api/recruitment/drive          POST     admin
+/api/recruitment/attendance     POST     admin
+/api/recruitment/absentees      GET      admin, coordinator
+/api/dashboard/*                GET      admin, coordinator
+/api/policy/rules               GET      admin
+/api/policy/rules/:id           PUT      admin
+/api/policy/check               POST     admin
+/api/audit/logs                 GET      admin
+/api/audit/logs/:targetId       GET      admin
+
+================================================================================
+  END OF DOCUMENT
+================================================================================

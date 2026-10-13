@@ -1,0 +1,126 @@
+================================================================================
+  NFSU PLACEMENT PORTAL — SECURITY OVERVIEW
+  Session 2026-27
+================================================================================
+
+This document provides a high-level summary of all security controls implemented
+in the NFSU Placement Management System.
+
+--------------------------------------------------------------------------------
+1. AUTHENTICATION
+--------------------------------------------------------------------------------
+- Passwords hashed using bcrypt with cost factor 12 (configurable via BCRYPT_ROUNDS)
+- JWT-based stateless authentication
+    Access Token  : 15 minutes expiry (JWT_ACCESS_EXPIRY)
+    Refresh Token : 7 days expiry, stored in HTTP-only cookie (JWT_REFRESH_EXPIRY)
+- TOTP-based Multi-Factor Authentication (MFA) via speakeasy
+    Mandatory for: Admin, Coordinator
+    Optional for : Student, Recruiter
+- Account lockout after 5 consecutive failed login attempts (15-minute lock)
+- Token blacklist on logout (in-memory, Redis-ready)
+- Session timeout with server-side invalidation
+
+--------------------------------------------------------------------------------
+2. AUTHORIZATION — ROLE-BASED ACCESS CONTROL (RBAC)
+--------------------------------------------------------------------------------
+Roles defined: admin | coordinator | student | recruiter
+
+Key permission boundaries:
+  - Admin        : Full access to all resources
+  - Coordinator  : Scoped to own assigned course only
+  - Student      : Own profile and own offers only (read-only)
+  - Recruiter    : Own company offers and company stats only
+
+Route-level enforcement via authorize() middleware.
+Frontend ProtectedRoute / requireAuth() enforces role before rendering any page.
+
+--------------------------------------------------------------------------------
+3. TRANSPORT SECURITY
+--------------------------------------------------------------------------------
+- HTTPS enforced in production (TLS 1.2+)
+- Helmet.js sets the following HTTP security headers:
+    Content-Security-Policy (CSP)
+    HTTP Strict Transport Security (HSTS)
+    X-Frame-Options: DENY
+    X-Content-Type-Options: nosniff
+    Referrer-Policy
+    Permissions-Policy
+
+--------------------------------------------------------------------------------
+4. DATA PROTECTION — ENCRYPTION AT REST
+--------------------------------------------------------------------------------
+- Field-level AES-256 encryption for PII fields:
+    name, mobile, email (Student model)
+    mfaSecret (User model)
+    before/after snapshots in AuditLog
+- Encryption key stored in environment variable (MONGODB_ENCRYPTION_KEY)
+- Audit encryption key stored separately (AUDIT_ENCRYPTION_KEY)
+- MongoDB backups are encrypted
+
+--------------------------------------------------------------------------------
+5. INPUT SECURITY
+--------------------------------------------------------------------------------
+- All inputs validated server-side with Joi before reaching controllers
+- express-mongo-sanitize prevents NoSQL injection attacks
+- xss-clean strips XSS payloads from request body, query, and params
+- Parameterized Mongoose queries only — no raw string interpolation
+- Client-side validation mirrors backend rules (Zod schemas in frontend)
+
+--------------------------------------------------------------------------------
+6. RATE LIMITING
+--------------------------------------------------------------------------------
+- Auth endpoints    : 10 requests / 15 minutes per IP
+- API endpoints     : 100 requests / minute per user
+- Export endpoints  : 5 requests / hour per user
+- Implemented via express-rate-limit (rateLimit.config.js)
+
+--------------------------------------------------------------------------------
+7. AUDIT LOGGING
+--------------------------------------------------------------------------------
+- Every sensitive action writes an AuditLog document (append-only)
+- No UPDATE or DELETE route exists for AuditLog collection
+- Before/after snapshots stored for all student and offer mutations
+- PII field access (mobile, email reveal) is individually logged
+- Logged actions include:
+    LOGIN, LOGOUT, LOGIN_FAILED, ACCOUNT_LOCKED
+    STUDENT_CREATED, STUDENT_UPDATED, STUDENT_ARCHIVED
+    OFFER_CREATED, OFFER_OVERRIDE
+    EXPORT_GENERATED
+    PII_VIEWED
+    POLICY_RULE_CHANGED
+    USER_CREATED, PASSWORD_CHANGED, MFA_ENABLED
+
+--------------------------------------------------------------------------------
+8. EXPORT SECURITY
+--------------------------------------------------------------------------------
+- CSV/Excel exports restricted to Admin role only
+- Every export event logged with: actor, timestamp, filters applied, row count
+- Raw PII excluded from exports unless explicitly authorized by Admin
+
+--------------------------------------------------------------------------------
+9. SESSION SECURITY
+--------------------------------------------------------------------------------
+- express-session with connect-mongo session store
+- Session secret stored in environment variable (SESSION_SECRET)
+- sessionGuard middleware detects session timeout and hijack attempts
+- Refresh token stored in HTTP-only, SameSite cookie (not accessible via JS)
+
+--------------------------------------------------------------------------------
+10. PLACEMENT ID INTEGRITY
+--------------------------------------------------------------------------------
+- Unique Placement ID enforced at database level (unique index)
+- Duplicate check performed before creation (placementId.js utility)
+- Format: NFSU-YYYY-COURSE-NNN
+
+--------------------------------------------------------------------------------
+11. SECURITY NOTICE FOR CONTRIBUTORS
+--------------------------------------------------------------------------------
+1. Never commit .env files or secrets to version control
+2. Use parameterized queries exclusively — no string-interpolated DB queries
+3. Run `npm audit` before every release and resolve high/critical findings
+4. Follow the principle of least privilege when assigning roles
+5. Treat audit logs as evidence — do not modify or delete them
+
+================================================================================
+  END OF DOCUMENT
+================================================================================

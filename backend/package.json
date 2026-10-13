@@ -1,0 +1,48 @@
+{
+  "name": "mashakti-backend",
+  "version": "1.0.0",
+  "description": "NFSU Placement Management System - Backend",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "nodemon src/server.js",
+    "seed:admin": "node src/utils/seedAdmin.js",
+    "seed:demo": "node src/utils/seedDemo.js",
+    "test": "jest --runInBand"
+  },
+  "dependencies": {
+    "bcryptjs": "^2.4.3",
+    "connect-mongo": "^5.1.0",
+    "cors": "^2.8.5",
+    "crypto": "^1.0.1",
+    "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
+    "express": "^4.19.2",
+    "express-mongo-sanitize": "^2.2.0",
+    "express-rate-limit": "^7.3.1",
+    "express-session": "^1.18.0",
+    "express-validator": "^7.1.0",
+    "helmet": "^7.1.0",
+    "joi": "^17.13.1",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.4.1",
+    "mongoose-encryption": "^2.1.2",
+    "morgan": "^1.10.0",
+    "node-cron": "^3.0.3",
+    "qrcode": "^1.5.3",
+    "speakeasy": "^2.0.0",
+    "winston": "^3.13.0",
+    "xss-clean": "^0.1.4"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "nodemon": "^3.1.3",
+    "supertest": "^7.0.0"
+  },
+  "jest": {
+    "testEnvironment": "node",
+    "testTimeout": 60000,
+    "setupFiles": ["<rootDir>/src/__tests__/setup.js"],
+    "testPathIgnorePatterns": ["/node_modules/", "src/__tests__/setup.js"]
+  }
+}

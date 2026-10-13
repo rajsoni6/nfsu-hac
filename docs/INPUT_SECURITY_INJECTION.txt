@@ -1,0 +1,150 @@
+================================================================================
+  NFSU PLACEMENT PORTAL — INPUT SECURITY & INJECTION PREVENTION
+  Session 2026-27
+================================================================================
+
+--------------------------------------------------------------------------------
+1. SERVER-SIDE VALIDATION
+--------------------------------------------------------------------------------
+Library         : Joi (backend validators)
+Location        : backend/src/validators/
+
+All incoming request bodies are validated before reaching controllers.
+Validation middleware (validateCreate, validateUpdate) runs in the route chain:
+
+  authenticate → authorize → validateRequest → Controller
+
+Validation behavior:
+  - abortEarly: false  — all errors returned at once, not just the first
+  - stripUnknown: true — unknown fields silently removed from request body
+  - Returns HTTP 422 with structured error array on failure:
+      { success: false, message: "Validation failed", errors: [...] }
+
+Validated schemas:
+  student.validator.js  — create and update schemas
+  offer.validator.js    — offer creation schema
+  auth.validator.js     — login and password change schemas
+  company.validator.js  — company create/update schemas
+
+--------------------------------------------------------------------------------
+2. NOSQL INJECTION PREVENTION
+--------------------------------------------------------------------------------
+Library         : express-mongo-sanitize
+Applied         : Global middleware in app.js
+
+Strips MongoDB query operators ($, .) from:
+  - req.body
+  - req.query
+  - req.params
+
+Example attack blocked:
+  POST /api/auth/login
+  { "username": { "$gt": "" }, "password": { "$gt": "" } }
+  → Sanitized to: { "username": "", "password": "" } → Login fails
+
+All Mongoose queries use parameterized form:
+  User.findOne({ username })          ✓ Safe
+  User.findOne(`username=${input}`)   ✗ Never used
+
+--------------------------------------------------------------------------------
+3. XSS PREVENTION
+--------------------------------------------------------------------------------
+Library         : xss-clean
+Applied         : Global middleware in app.js
+
+Strips HTML tags and JavaScript event handlers from:
+  - req.body
+  - req.query
+  - req.headers
+
+Example attack blocked:
+  name: "<script>alert('xss')</script>Arjun"
+  → Sanitized to: "Arjun"
+
+Content-Security-Policy header (via Helmet) provides additional browser-level
+XSS protection by restricting script sources.
+
+--------------------------------------------------------------------------------
+4. HTTP SECURITY HEADERS (HELMET)
+--------------------------------------------------------------------------------
+File: backend/src/config/helmet.config.js
+
+Header                          Value / Policy
+------------------------------  -----------------------------------------------
+Content-Security-Policy         default-src 'self'; script-src 'self'
+X-Frame-Options                 DENY
+X-Content-Type-Options          nosniff
+Strict-Transport-Security       max-age=31536000; includeSubDomains
+Referrer-Policy                 no-referrer
+Permissions-Policy              camera=(), microphone=(), geolocation=()
+X-XSS-Protection                0 (disabled — CSP is the modern replacement)
+
+--------------------------------------------------------------------------------
+5. RATE LIMITING
+--------------------------------------------------------------------------------
+File: backend/src/config/rateLimit.config.js
+Library: express-rate-limit
+
+Endpoint Group      Limit                   Window        Purpose
+------------------  ----------------------  ------------  ----------------------
+Auth endpoints      10 requests             15 minutes    Brute-force protection
+API endpoints       100 requests per user   1 minute      General abuse prevention
+Export endpoints    5 requests per user     1 hour        Data exfiltration limit
+
+Rate limit exceeded response: HTTP 429 Too Many Requests
+
+Auth rate limiter applied to:
+  POST /api/auth/login
+  POST /api/auth/mfa/verify
+  POST /api/auth/refresh
+
+--------------------------------------------------------------------------------
+6. CORS POLICY
+--------------------------------------------------------------------------------
+Library         : cors
+Allowed Origins : ALLOWED_ORIGINS environment variable
+                  (e.g. https://placement.nfsu.ac.in)
+
+In production:
+  - Only the configured origin is allowed
+  - Credentials (cookies) allowed: true
+  - Methods: GET, POST, PUT, PATCH, DELETE
+
+In development:
+  - localhost origins permitted for testing
+
+--------------------------------------------------------------------------------
+7. CLIENT-SIDE VALIDATION
+--------------------------------------------------------------------------------
+Frontend validation mirrors backend rules to provide immediate user feedback.
+It does NOT replace server-side validation — all inputs are re-validated on
+the server regardless of client-side checks.
+
+Validation rules enforced client-side:
+  - Mobile: 10-digit Indian number starting with 6-9
+  - Email: valid email format
+  - Password: minimum 8 characters
+  - Course: must be one of MTCS, MTAIDS, BTMTCSE, MSCCS, MSCDFIS
+  - Batch: 4-20 character string
+
+--------------------------------------------------------------------------------
+8. SECURITY TEST CASES
+--------------------------------------------------------------------------------
+The following attack scenarios are covered in backend/src/__tests__/security.test.js:
+
+Test                                                    Expected Result
+------------------------------------------------------  -----------------------
+Student modifies own placement status via API           HTTP 403
+Student accesses another student's record by ID         HTTP 403
+Recruiter attempts to create an offer                   HTTP 403
+Coordinator accesses students outside own course        HTTP 403
+Submit offer bypassing policy check                     Blocked server-side
+Brute-force login (6+ attempts)                         Account locked, HTTP 403
+NoSQL operator injected in search query                 Sanitized, no data leak
+XSS payload in student name field                       Stripped, stored clean
+Access audit logs as Coordinator or Recruiter           HTTP 403
+Export data as Coordinator or Student                   HTTP 403
+
+================================================================================
+  END OF DOCUMENT
+================================================================================

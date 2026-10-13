@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>New Offer — NFSU Placement</title>
+  <link rel="stylesheet" href="../css/style.css">
+</head>
+<body>
+<div class="layout">
+  <aside class="sidebar" id="sidebar"></aside>
+  <div class="main">
+    <header class="topbar">
+      <div style="display:flex;align-items:center;gap:12px">
+        <button class="menu-toggle" id="menu-toggle">☰</button>
+        <a href="offers.html" class="btn btn-secondary btn-sm">← Back</a>
+        <span class="topbar-title" id="page-title">New Offer</span>
+      </div>
+    </header>
+
+    <div class="page-content">
+      <div style="max-width:720px;margin:0 auto">
+        <div class="page-header">
+          <div><h1>Create Offer</h1><p>Policy check runs automatically before submission.</p></div>
+        </div>
+
+        <div class="card">
+          <form id="offer-form">
+            <div class="form-grid">
+              <!-- Student -->
+              <div class="form-group full">
+                <label>Student *</label>
+                <input type="text" id="student-search" placeholder="Search by name or placement ID…" autocomplete="off">
+                <input type="hidden" id="student-id">
+                <div id="student-dropdown" style="position:relative"></div>
+                <div id="student-selected" style="display:none;margin-top:8px"></div>
+              </div>
+
+              <!-- Company -->
+              <div class="form-group full">
+                <label>Company *</label>
+                <select id="company-id" required>
+                  <option value="">Select company…</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>Offer Type *</label>
+                <select id="offer-type" required>
+                  <option value="">Select type</option>
+                  <option value="I">I — Internship Only</option>
+                  <option value="F">F — FTE Only</option>
+                  <option value="I+F">I+F — Internship + FTE</option>
+                </select>
+              </div>
+
+              <div class="form-group" id="ctc-group" style="display:none">
+                <label>CTC (LPA) *</label>
+                <input type="number" id="ctc-lpa" step="0.1" min="0" placeholder="e.g. 12.5">
+              </div>
+
+              <div class="form-group" id="stipend-group" style="display:none">
+                <label>Stipend (₹/month) *</label>
+                <input type="number" id="stipend-amount" min="0" placeholder="e.g. 25000">
+              </div>
+
+              <div class="form-group" id="stipend-period-group" style="display:none">
+                <label>Stipend Period</label>
+                <input type="text" id="stipend-period" placeholder="e.g. 6 months">
+              </div>
+
+              <div class="form-group">
+                <label>Offer Date *</label>
+                <input type="date" id="offer-date" required>
+              </div>
+
+              <div class="form-group">
+                <label>Acceptance Deadline *</label>
+                <input type="date" id="acceptance-deadline" required>
+              </div>
+
+              <div class="form-group">
+                <label>Off-Campus?</label>
+                <select id="is-off-campus">
+                  <option value="false">No</option>
+                  <option value="true">Yes</option>
+                </select>
+              </div>
+
+              <div class="form-group">
+                <label>NOC Status</label>
+                <input type="text" id="noc-status" placeholder="e.g. Approved / NA">
+              </div>
+            </div>
+
+            <!-- Policy Check Result -->
+            <div id="policy-result" style="display:none"></div>
+
+            <div class="form-actions" style="margin-top:20px">
+              <button type="button" class="btn btn-secondary" id="btn-check">🔍 Check Policy</button>
+              <button type="submit" class="btn btn-primary" id="btn-submit" disabled>Submit Offer</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script src="../js/app.js"></script>
+<script>
+  requireAuth(['admin']);
+  initPage('New Offer', 'New Offer');
+
+  let policyPassed = false;
+  let searchTimeout;
+
+  // Pre-fill student from URL
+  const preStudentId = new URLSearchParams(location.search).get('student');
+
+  // Load companies
+  async function loadCompanies() {
+    const res = await apiFetch('/companies?active=true');
+    const sel = document.getElementById('company-id');
+    (res?.data?.companies || []).forEach(c => {
+      const opt = document.createElement('option');
+      opt.value = c._id;
+      opt.textContent = `${c.name} (${c.category}) — ₹${c.minPackageLPA}–${c.maxPackageLPA} LPA`;
+      sel.appendChild(opt);
+    });
+  }
+
+  // Student search
+  document.getElementById('student-search').addEventListener('input', e => {
+    clearTimeout(searchTimeout);
+    const q = e.target.value.trim();
+    if (q.length < 2) { document.getElementById('student-dropdown').innerHTML = ''; return; }
+    searchTimeout = setTimeout(async () => {
+      const res = await apiFetch('/students?search=' + encodeURIComponent(q) + '&limit=6');
+      const students = res?.data?.students || [];
+      const dd = document.getElementById('student-dropdown');
+      if (!students.length) { dd.innerHTML = ''; return; }
+      dd.innerHTML = `<div style="position:absolute;top:4px;left:0;right:0;background:var(--surface-2);border:1px solid var(--border);border-radius:8px;box-shadow:var(--shadow);z-index:50;overflow:hidden">` +
+        students.map(s => `<div onclick="selectStudent('${s._id}','${s.name}','${s.placementId||''}','${s.course}')"
+          style="padding:10px 14px;cursor:pointer;font-size:.875rem;border-bottom:1px solid var(--border)"
+          onmouseover="this.style.background='#334155'" onmouseout="this.style.background=''"
+          ><strong>${s.name}</strong> <span style="color:var(--text-muted)">${s.placementId||''}</span> ${coursePill(s.course)}</div>`).join('') +
+        `</div>`;
+    }, 300);
+  });
+
+  function selectStudent(id, name, pid, course) {
+    document.getElementById('student-id').value = id;
+    document.getElementById('student-search').value = '';
+    document.getElementById('student-dropdown').innerHTML = '';
+    document.getElementById('student-selected').style.display = 'block';
+    document.getElementById('student-selected').innerHTML = `
+      <div class="alert alert-info" style="padding:10px 14px">
+        <span>🎓</span>
+        <div><strong>${name}</strong> &nbsp; <code style="font-size:.8rem;background:var(--surface-2);color:var(--primary-light);padding:2px 6px;border-radius:4px;border:1px solid var(--border)">${pid}</code> &nbsp; ${coursePill(course)}
+        <button onclick="clearStudent()" style="margin-left:10px;background:none;border:none;cursor:pointer;color:var(--danger);font-size:.8rem">✕ Clear</button></div>
+      </div>`;
+    policyPassed = false;
+    document.getElementById('btn-submit').disabled = true;
+    document.getElementById('policy-result').style.display = 'none';
+  }
+
+  function clearStudent() {
+    document.getElementById('student-id').value = '';
+    document.getElementById('student-selected').style.display = 'none';
+    document.getElementById('student-selected').innerHTML = '';
+  }
+
+  // Offer type toggles
+  document.getElementById('offer-type').addEventListener('change', e => {
+    const t = e.target.value;
+    document.getElementById('ctc-group').style.display = ['F','I+F'].includes(t) ? 'block' : 'none';
+    document.getElementById('stipend-group').style.display = ['I','I+F'].includes(t) ? 'block' : 'none';
+    document.getElementById('stipend-period-group').style.display = ['I','I+F'].includes(t) ? 'block' : 'none';
+    policyPassed = false;
+    document.getElementById('btn-submit').disabled = true;
+    document.getElementById('policy-result').style.display = 'none';
+  });
+
+  // Policy check
+  document.getElementById('btn-check').addEventListener('click', async () => {
+    const studentId = document.getElementById('student-id').value;
+    const companyId = document.getElementById('company-id').value;
+    const offerType = document.getElementById('offer-type').value;
+    if (!studentId || !companyId || !offerType) {
+      toast('Select student, company, and offer type first', 'error'); return;
+    }
+    const btn = document.getElementById('btn-check');
+    btn.textContent = 'Checking…'; btn.disabled = true;
+    const res = await apiFetch('/policy/check', {
+      method: 'POST',
+      body: JSON.stringify({ studentId, companyId, offerType }),
+    });
+    btn.textContent = '🔍 Check Policy'; btn.disabled = false;
+
+    const pr = document.getElementById('policy-result');
+    pr.style.display = 'block';
+    const result = res?.data?.result || res?.data;
+    if (!result) { pr.innerHTML = '<div class="alert alert-danger">Policy check failed.</div>'; return; }
+
+    if (result.allowed) {
+      policyPassed = true;
+      document.getElementById('btn-submit').disabled = false;
+      pr.innerHTML = `<div class="policy-result allowed">
+        <div class="policy-title">✅ Policy Check Passed</div>
+        <div>This offer is permitted under current placement rules.</div>
+      </div>`;
+    } else {
+      policyPassed = false;
+      document.getElementById('btn-submit').disabled = true;
+      pr.innerHTML = `<div class="policy-result blocked">
+        <div class="policy-title">🚫 Policy Violation</div>
+        <div>${result.reason || 'Offer not permitted.'}</div>
+        <div class="policy-flags">${(result.flags||[]).map(f=>`<span class="policy-flag">${f}</span>`).join('')}</div>
+        ${result.overridableBy?.includes('admin') ? `<div style="margin-top:10px;font-size:.82rem">Admin can override this via the offer detail page.</div>` : ''}
+      </div>`;
+    }
+  });
+
+  // Submit
+  document.getElementById('offer-form').addEventListener('submit', async e => {
+    e.preventDefault();
+    if (!policyPassed) { toast('Run policy check first', 'error'); return; }
+    const body = {
+      student: document.getElementById('student-id').value,
+      company: document.getElementById('company-id').value,
+      offerType: document.getElementById('offer-type').value,
+      offerDate: document.getElementById('offer-date').value,
+      acceptanceDeadline: document.getElementById('acceptance-deadline').value,
+      isOffCampus: document.getElementById('is-off-campus').value === 'true',
+      nocStatus: document.getElementById('noc-status').value || null,
+    };
+    const ctc = document.getElementById('ctc-lpa').value;
+    const stipend = document.getElementById('stipend-amount').value;
+    if (ctc) body.ctcLPA = parseFloat(ctc);
+    if (stipend) body.stipendAmount = parseFloat(stipend);
+    const sp = document.getElementById('stipend-period').value;
+    if (sp) body.stipendPeriod = sp;
+
+    const btn = document.getElementById('btn-submit');
+    btn.disabled = true; btn.textContent = 'Submitting…';
+    const res = await apiFetch('/offers', { method: 'POST', body: JSON.stringify(body) });
+    btn.disabled = false; btn.textContent = 'Submit Offer';
+
+    if (res?.success && res?.data?.offer) {
+      toast('Offer created successfully');
+      setTimeout(() => window.location.href = 'offers.html', 1000);
+    } else {
+      toast(res?.message || 'Failed to create offer', 'error');
+    }
+  });
+
+  loadCompanies();
+
+  // Pre-fill student if coming from student detail
+  if (preStudentId) {
+    apiFetch('/students/' + preStudentId).then(res => {
+      const s = res?.data?.student;
+      if (s) selectStudent(s._id, s.name, s.placementId||'', s.course);
+    });
+  }
+</script>
+</body>
+</html>

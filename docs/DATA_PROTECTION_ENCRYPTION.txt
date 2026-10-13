@@ -1,0 +1,106 @@
+================================================================================
+  NFSU PLACEMENT PORTAL — DATA PROTECTION & ENCRYPTION
+  Session 2026-27
+================================================================================
+
+--------------------------------------------------------------------------------
+1. ENCRYPTION ALGORITHM
+--------------------------------------------------------------------------------
+Algorithm       : AES-256
+Library         : Node.js built-in crypto + mongoose-encryption
+Key Storage     : Environment variables (never in source code)
+  MONGODB_ENCRYPTION_KEY  — 32-byte hex key for PII fields
+  AUDIT_ENCRYPTION_KEY    — 32-byte hex key for audit snapshots
+
+--------------------------------------------------------------------------------
+2. ENCRYPTED FIELDS
+--------------------------------------------------------------------------------
+Model           Field               Reason
+-----------     -----------------   -------------------------------------------
+Student         name                PII — personal identity
+Student         mobile              PII — contact information
+Student         email               PII — contact information
+Student         currentPackageLPA   Sensitive compensation data
+User            mfaSecret           Security credential
+AuditLog        before              May contain PII snapshots
+AuditLog        after               May contain PII snapshots
+
+Fields NOT encrypted (needed for indexing/querying):
+  - placementId (unique index, used for search)
+  - course, batch, placementStatus, eligibilityStatus (filter fields)
+  - username (login lookup)
+
+--------------------------------------------------------------------------------
+3. PII ACCESS CONTROL
+--------------------------------------------------------------------------------
+Mobile and email fields are:
+  - Excluded from list endpoints (Student.find().select('-mobile -email'))
+  - Returned only to: admin, coordinator (own course), student (own record)
+  - Every access by admin/coordinator is logged as PII_VIEWED in AuditLog
+
+Frontend behavior:
+  - Mobile and email fields masked by default in UI
+  - Reveal requires explicit user action
+  - Reveal action is logged client-side and server-side
+
+--------------------------------------------------------------------------------
+4. EXPORT DATA PROTECTION
+--------------------------------------------------------------------------------
+- Exports restricted to Admin role only
+- Raw PII (mobile, email) excluded from exports unless Admin explicitly authorizes
+- Every export logged with: actor, timestamp, filters applied, row count
+- Export files are generated in-memory and streamed — not stored on disk
+
+--------------------------------------------------------------------------------
+5. DATABASE SECURITY
+--------------------------------------------------------------------------------
+- MongoDB connection string stored in MONGODB_URI environment variable
+- MongoDB Atlas recommended (TLS enforced by default)
+- Encrypted backups — backup files are not plaintext
+- No raw string interpolation in queries — Mongoose parameterized queries only
+- express-mongo-sanitize strips MongoDB operators ($, .) from user input
+  preventing NoSQL injection attacks
+
+--------------------------------------------------------------------------------
+6. TRANSPORT ENCRYPTION
+--------------------------------------------------------------------------------
+- All API communication over HTTPS (TLS 1.2+) in production
+- Helmet HSTS header enforces HTTPS for all future requests:
+    Strict-Transport-Security: max-age=31536000; includeSubDomains
+- Refresh token cookie marked secure=true in production
+  (transmitted only over HTTPS)
+
+--------------------------------------------------------------------------------
+7. ENVIRONMENT SECRETS MANAGEMENT
+--------------------------------------------------------------------------------
+Secret                      Variable                    Notes
+--------------------------  --------------------------  ----------------------
+MongoDB URI                 MONGODB_URI                 Includes credentials
+DB Encryption Key           MONGODB_ENCRYPTION_KEY      32-byte hex
+Audit Encryption Key        AUDIT_ENCRYPTION_KEY        32-byte hex
+JWT Access Secret           JWT_ACCESS_SECRET           Strong random string
+JWT Refresh Secret          JWT_REFRESH_SECRET          Strong random string
+Session Secret              SESSION_SECRET              Strong random string
+
+Rules:
+  - .env files are listed in .gitignore — never committed to version control
+  - .env.example provided with placeholder values only
+  - Secrets rotated immediately if accidentally exposed
+  - Minimum key length: 32 bytes (256 bits) for encryption keys
+
+--------------------------------------------------------------------------------
+8. GENERATING SECURE KEYS
+--------------------------------------------------------------------------------
+Use the following command to generate a secure 32-byte hex key:
+
+  node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+
+Or using OpenSSL:
+
+  openssl rand -hex 32
+
+Run once per secret, store in .env, never reuse across environments.
+
+================================================================================
+  END OF DOCUMENT
+================================================================================

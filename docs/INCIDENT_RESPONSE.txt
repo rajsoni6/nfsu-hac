@@ -1,0 +1,119 @@
+================================================================================
+  NFSU PLACEMENT PORTAL — SECURITY INCIDENT RESPONSE
+  Session 2026-27
+================================================================================
+
+--------------------------------------------------------------------------------
+1. INCIDENT CLASSIFICATION
+--------------------------------------------------------------------------------
+Severity    Description                         Examples
+--------    --------------------------------    --------------------------------
+P1 Critical Data breach — PII exposed           DB dump leaked, encryption key
+                                                compromised, mass data access
+P2 High     Unauthorized access                 Admin account compromised,
+                                                RBAC bypass confirmed
+P3 Medium   Attempted attack detected           Brute-force, injection attempt,
+                                                repeated 403s from one IP
+P4 Low      Policy or configuration issue       Misconfigured CORS, weak secret
+                                                detected in non-production env
+
+--------------------------------------------------------------------------------
+2. IMMEDIATE RESPONSE STEPS
+--------------------------------------------------------------------------------
+
+P1 — Critical (Data Breach)
+  1. Take the application offline immediately
+  2. Rotate ALL secrets: JWT, encryption keys, session secret, DB password
+  3. Invalidate all active sessions (clear token blacklist store, restart server)
+  4. Preserve audit logs — do not modify or delete
+  5. Notify NFSU IT Security and Data Protection Officer
+  6. Identify affected student records from audit logs
+  7. Notify affected students as required by policy
+  8. Conduct root cause analysis before bringing system back online
+
+P2 — High (Unauthorized Access)
+  1. Immediately deactivate the compromised user account (isActive = false)
+  2. Blacklist all tokens issued to that account
+  3. Review audit logs for all actions taken by the compromised account
+  4. Rotate JWT secrets to invalidate all existing tokens system-wide
+  5. Investigate how the account was compromised
+  6. Restore any data modified by the unauthorized actor
+
+P3 — Medium (Attempted Attack)
+  1. Identify source IP from logs
+  2. Block IP at firewall/reverse proxy level if attack is ongoing
+  3. Review audit logs for any successful actions from that IP
+  4. Verify rate limiting is functioning correctly
+  5. Document the incident
+
+P4 — Low (Configuration Issue)
+  1. Fix the misconfiguration
+  2. Verify fix in staging before deploying to production
+  3. Document the issue and resolution
+
+--------------------------------------------------------------------------------
+3. FORENSIC EVIDENCE PRESERVATION
+--------------------------------------------------------------------------------
+Before taking any remediation action, preserve:
+  - Full AuditLog export (encrypted)
+  - MongoDB access logs
+  - Application server logs (winston/morgan output)
+  - Web server / reverse proxy access logs
+  - Timestamps of all suspicious activity
+
+AuditLog export command (admin):
+  GET /api/audit/logs?from=<start>&to=<end>
+  (Requires admin JWT — export before rotating secrets)
+
+--------------------------------------------------------------------------------
+4. SECRET ROTATION PROCEDURE
+--------------------------------------------------------------------------------
+When rotating secrets after a compromise:
+
+Step 1: Generate new secrets
+  node -e "console.log(require('crypto').randomBytes(32).toString('hex'))"
+  (Run separately for each secret)
+
+Step 2: Update .env with new values
+
+Step 3: Restart the backend server
+  (All existing JWTs signed with old secret are now invalid)
+
+Step 4: Clear token blacklist store
+  (Old blacklisted tokens are now irrelevant — new secret makes them invalid)
+
+Step 5: If encryption keys rotated:
+  - Decrypt all encrypted fields with old key
+  - Re-encrypt with new key
+  - This requires a migration script — contact the development team
+
+Step 6: Force all users to re-login
+  (Existing tokens invalid after secret rotation)
+
+Step 7: Notify users of forced logout if appropriate
+
+--------------------------------------------------------------------------------
+5. CONTACT INFORMATION
+--------------------------------------------------------------------------------
+Role                        Responsibility
+--------------------------  ---------------------------------------------------
+System Administrator        Secret rotation, server access, DB access
+NFSU IT Security Team       Incident escalation, forensics, notifications
+Placement Cell Coordinator  Notify affected students, operational decisions
+Development Team            Code-level fixes, migration scripts, patches
+
+--------------------------------------------------------------------------------
+6. POST-INCIDENT REVIEW
+--------------------------------------------------------------------------------
+Within 48 hours of resolution:
+  [ ] Document timeline of the incident
+  [ ] Identify root cause
+  [ ] List all affected data and users
+  [ ] Document remediation steps taken
+  [ ] Identify control gaps that allowed the incident
+  [ ] Propose and schedule fixes for identified gaps
+  [ ] Update this document if new incident types identified
+
+================================================================================
+  END OF DOCUMENT
+================================================================================

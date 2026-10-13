@@ -1,0 +1,115 @@
+================================================================================
+  NFSU PLACEMENT PORTAL — AUTHENTICATION & SESSION SECURITY
+  Session 2026-27
+================================================================================
+
+--------------------------------------------------------------------------------
+1. PASSWORD POLICY
+--------------------------------------------------------------------------------
+Algorithm       : bcrypt
+Cost Factor     : 12 (configurable via BCRYPT_ROUNDS in .env)
+Minimum Length  : 8 characters (enforced by Joi validator)
+Maximum Length  : 128 characters
+Storage         : passwordHash field only — plaintext never stored or logged
+
+Password change flow:
+  - User must provide current password before setting a new one
+  - On successful change, current access token is blacklisted
+  - Refresh token cookie is cleared, forcing re-login
+
+--------------------------------------------------------------------------------
+2. JWT TOKEN ARCHITECTURE
+--------------------------------------------------------------------------------
+Access Token
+  Secret      : JWT_ACCESS_SECRET (env)
+  Expiry      : 15 minutes (JWT_ACCESS_EXPIRY)
+  Payload     : { id: User._id, role }
+  Transport   : Authorization: Bearer <token> header
+
+Refresh Token
+  Secret      : JWT_REFRESH_SECRET (env)
+  Expiry      : 7 days (JWT_REFRESH_EXPIRY)
+  Payload     : { id: User._id }
+  Transport   : HTTP-only cookie (refreshToken)
+  Cookie Flags: httpOnly=true, secure=true (production), sameSite=strict (production)
+
+Token Refresh Flow:
+  1. Client sends POST /api/auth/refresh with cookie
+  2. Server verifies refresh token signature and expiry
+  3. Server checks user is still active
+  4. New access token issued — refresh token unchanged
+
+Token Blacklist:
+  - On logout, the current access token is added to an in-memory blacklist
+  - authenticate.js checks blacklist on every request
+  - Architecture is Redis-ready for horizontal scaling
+
+--------------------------------------------------------------------------------
+3. MULTI-FACTOR AUTHENTICATION (MFA)
+--------------------------------------------------------------------------------
+Standard        : TOTP (Time-based One-Time Password) — RFC 6238
+Library         : speakeasy
+QR Code         : qrcode library generates setup QR for authenticator apps
+Window          : ±1 step tolerance (30-second window)
+
+MFA Setup Flow:
+  1. POST /api/auth/mfa/setup  → generates secret + QR code
+  2. User scans QR with Google Authenticator / Authy
+  3. POST /api/auth/mfa/enable with TOTP code → enables MFA on account
+
+MFA Login Flow:
+  1. POST /api/auth/login with username + password
+  2. If MFA enabled: returns { mfaRequired: true, tempToken }
+     tempToken is a short-lived JWT (5 min) carrying only username
+  3. POST /api/auth/mfa/verify with tempToken + 6-digit code
+  4. On success: full access token + refresh token issued
+
+Roles requiring MFA: admin, coordinator
+Roles with optional MFA: student, recruiter
+
+--------------------------------------------------------------------------------
+4. ACCOUNT LOCKOUT
+--------------------------------------------------------------------------------
+Threshold       : 5 consecutive failed login attempts
+Lock Duration   : 15 minutes
+Storage         : failedAttempts and lockedUntil fields on User document
+Reset           : failedAttempts reset to 0 on successful login
+Audit           : ACCOUNT_LOCKED action written to AuditLog on lockout
+
+--------------------------------------------------------------------------------
+5. SESSION MANAGEMENT
+--------------------------------------------------------------------------------
+Store           : connect-mongo (MongoDB-backed session store)
+Secret          : SESSION_SECRET (env)
+Timeout         : Enforced by sessionGuard middleware
+Hijack Detection: sessionGuard checks for IP/User-Agent consistency
+
+On logout:
+  - Access token added to blacklist
+  - Refresh token cookie cleared (res.clearCookie)
+  - Session invalidated server-side
+  - LOGOUT action written to AuditLog
+
+--------------------------------------------------------------------------------
+6. LOGIN AUDIT TRAIL
+--------------------------------------------------------------------------------
+Every login attempt (success or failure) is recorded in AuditLog with:
+  - actor (User._id)
+  - action (LOGIN | LOGIN_FAILED | ACCOUNT_LOCKED | LOGOUT)
+  - ipAddress
+  - userAgent
+  - timestamp
+
+--------------------------------------------------------------------------------
+7. STUDENT LOGIN PROVISIONING
+--------------------------------------------------------------------------------
+When admin creates a student record:
+  - A linked User account is automatically created
+  - Username derived from email prefix (e.g. arjun.sharma@nfsu.ac.in → arjun.sharma)
+  - Password set by admin at creation time (min 8 characters)
+  - Role set to 'student', studentRef linked to Student document
+  - Student can log in immediately with provided credentials
+
+================================================================================
+  END OF DOCUMENT
+================================================================================
